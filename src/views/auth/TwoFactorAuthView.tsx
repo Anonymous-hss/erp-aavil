@@ -1,12 +1,11 @@
 import React, { useState, useRef } from 'react';
-import { ShieldCheck, ArrowLeft, RefreshCw, KeyRound, AlertCircle } from 'lucide-react';
+import { ShieldCheck, ArrowLeft, KeyRound, AlertCircle } from 'lucide-react';
 import { useERP } from '../../context/ERPContext';
 
 export const TwoFactorAuthView: React.FC = () => {
-  const { verify2FA, setCurrentView, currentUser, setFigmaOverlayAsset } = useERP();
+  const { setCurrentView, currentUser, setFigmaOverlayAsset } = useERP();
   const [digits, setDigits] = useState(['', '', '', '', '', '']);
   const [error, setError] = useState<string | null>(null);
-  const [timer, setTimer] = useState(58);
   const inputsRef = useRef<(HTMLInputElement | null)[]>([]);
 
   const handleChange = (index: number, val: string) => {
@@ -49,14 +48,7 @@ export const TwoFactorAuthView: React.FC = () => {
       return;
     }
 
-    const success = verify2FA(code);
-    if (!success) {
-      setError('Invalid code. For testing, enter any 6 digits (e.g. 123456).');
-    }
-  };
-
-  const handleQuickFill = () => {
-    setDigits(['1', '2', '3', '4', '5', '6']);
+    setError('Two-factor authentication is not enabled yet.');
   };
 
   return (
@@ -166,25 +158,8 @@ export const TwoFactorAuthView: React.FC = () => {
             ))}
           </div>
 
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', fontSize: '13px' }}>
-            <span style={{ color: '#8A8F98' }}>Expires in 00:{timer < 10 ? `0${timer}` : timer}</span>
-            <button
-              type="button"
-              onClick={handleQuickFill}
-              style={{
-                color: '#0052FF',
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                fontWeight: '600',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px'
-              }}
-            >
-              <RefreshCw size={12} />
-              <span>Auto-fill test code (123456)</span>
-            </button>
+          <div style={{ marginBottom: '24px', fontSize: '13px', color: '#8A8F98' }}>
+            Two-factor verification is not available yet.
           </div>
 
           <button

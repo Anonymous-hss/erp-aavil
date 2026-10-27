@@ -3,8 +3,6 @@ import {
   Users, 
   Calendar, 
   CreditCard, 
-  TrendingUp, 
-  ArrowUpRight, 
   Check, 
   X, 
   Briefcase, 
@@ -17,9 +15,18 @@ import { useERP } from '../../context/ERPContext';
 export const AdminDashboardView: React.FC = () => {
   const { 
     employees, 
+    employeesLoading,
+    authError,
     leaves, 
+    leavesLoading,
+    leavesError,
     reviewLeave, 
     projects, 
+    projectsLoading,
+    projectsError,
+    payroll,
+    payrollLoading,
+    payrollError,
     setCurrentView, 
     setFigmaOverlayAsset 
   } = useERP();
@@ -28,6 +35,24 @@ export const AdminDashboardView: React.FC = () => {
 
   const pendingLeaves = leaves.filter(l => l.status === 'Pending');
   const activeProjects = projects.filter(p => p.status === 'Active' || p.status === 'In Progress');
+  const activeEmployees = employees.filter(employee => employee.status !== 'Inactive');
+  const employeesUnavailable = employeesLoading || Boolean(authError);
+  const projectProgress = activeProjects.length
+    ? Math.round(activeProjects.reduce((total, project) => total + project.progress, 0) / activeProjects.length)
+    : null;
+  const latestPayrollPeriod = payroll.reduce<string | null>((latest, record) => {
+    const period = `${record.year}-${String(new Date(`${record.month} 1, ${record.year}`).getMonth() + 1).padStart(2, '0')}`;
+    return !latest || period > latest ? period : latest;
+  }, null);
+  const latestPayrollTotal = latestPayrollPeriod
+    ? payroll.filter(record => {
+      const period = `${record.year}-${String(new Date(`${record.month} 1, ${record.year}`).getMonth() + 1).padStart(2, '0')}`;
+      return period === latestPayrollPeriod;
+    }).reduce((total, record) => total + record.netPay, 0)
+    : null;
+  const formattedPayrollPeriod = latestPayrollPeriod
+    ? new Date(`${latestPayrollPeriod}-01T00:00:00.000Z`).toLocaleString('en', { month: 'short', year: 'numeric', timeZone: 'UTC' })
+    : null;
 
   return (
     <div style={{ padding: '32px' }}>
@@ -139,7 +164,7 @@ export const AdminDashboardView: React.FC = () => {
           </div>
           <h3 style={{ fontSize: '20px', fontWeight: '700', color: '#0A0B0D', margin: 0 }}>No Organization Data Found</h3>
           <p style={{ fontSize: '14px', color: '#5B616E', marginTop: '8px', lineHeight: '1.5' }}>
-            Get started by inviting your first team members or importing historical payroll and attendance records.
+            Add employees and projects to begin using your live organization dashboard.
           </p>
           <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', marginTop: '24px' }}>
             <button onClick={() => setCurrentView('employees')} className="btn btn-primary">
@@ -147,7 +172,7 @@ export const AdminDashboardView: React.FC = () => {
               <span>Add First Employee</span>
             </button>
             <button onClick={() => setDashboardState('default')} className="btn btn-secondary">
-              Restore Sample Data
+              Back to Dashboard
             </button>
           </div>
         </div>
@@ -165,12 +190,11 @@ export const AdminDashboardView: React.FC = () => {
                 </div>
               </div>
               <div style={{ fontSize: '30px', fontWeight: '800', color: 'var(--text-main)', marginTop: '8px', letterSpacing: '-0.02em' }}>
-                {employees.length + 142}
+                {employeesLoading ? '…' : authError ? '—' : employees.length}
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '6px', fontSize: '12.5px', color: '#05B169' }}>
-                <TrendingUp size={14} />
-                <span style={{ fontWeight: '600' }}>+12%</span>
-                <span style={{ color: 'var(--text-muted)' }}>vs previous quarter</span>
+                <span style={{ fontWeight: '600' }}>{employeesUnavailable ? '—' : activeEmployees.length}</span>
+                <span style={{ color: 'var(--text-muted)' }}>{authError ? 'Employee data unavailable' : 'active employees'}</span>
               </div>
             </div>
 
@@ -183,12 +207,11 @@ export const AdminDashboardView: React.FC = () => {
                 </div>
               </div>
               <div style={{ fontSize: '30px', fontWeight: '800', color: 'var(--text-main)', marginTop: '8px', letterSpacing: '-0.02em' }}>
-                {activeProjects.length + 8}
+                {projectsLoading ? '…' : projectsError ? '—' : activeProjects.length}
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '6px', fontSize: '12.5px', color: '#05B169' }}>
-                <ArrowUpRight size={14} />
-                <span style={{ fontWeight: '600' }}>94%</span>
-                <span style={{ color: 'var(--text-muted)' }}>on-track velocity</span>
+                <span style={{ fontWeight: '600' }}>{projectsLoading ? '…' : projectsError || projectProgress === null ? '—' : `${projectProgress}%`}</span>
+                <span style={{ color: 'var(--text-muted)' }}>average completion</span>
               </div>
             </div>
 
@@ -201,27 +224,27 @@ export const AdminDashboardView: React.FC = () => {
                 </div>
               </div>
               <div style={{ fontSize: '30px', fontWeight: '800', color: 'var(--text-main)', marginTop: '8px', letterSpacing: '-0.02em' }}>
-                {pendingLeaves.length}
+                {leavesLoading ? '…' : leavesError ? '—' : pendingLeaves.length}
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '6px', fontSize: '12.5px', color: '#B45309' }}>
                 <Clock size={14} />
-                <span style={{ fontWeight: '600' }}>Requires review</span>
+                <span style={{ fontWeight: '600' }}>{leavesLoading ? 'Loading requests' : leavesError ? 'Request data unavailable' : pendingLeaves.length ? 'Requires review' : 'No requests to review'}</span>
               </div>
             </div>
 
             {/* Metric 4 */}
             <div className="card" style={{ padding: '24px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <span style={{ fontSize: '13px', fontWeight: '500', color: 'var(--text-secondary)' }}>Monthly Payroll</span>
+                <span style={{ fontSize: '13px', fontWeight: '500', color: 'var(--text-secondary)' }}>Latest Payroll Total</span>
                 <div style={{ width: '36px', height: '36px', borderRadius: '8px', backgroundColor: '#E5EDFF', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0052FF' }}>
                   <CreditCard size={18} />
                 </div>
               </div>
               <div style={{ fontSize: '30px', fontWeight: '800', color: 'var(--text-main)', marginTop: '8px', letterSpacing: '-0.02em' }}>
-                $1.42M
+                {payrollLoading ? '…' : payrollError || latestPayrollTotal === null ? '—' : `$${latestPayrollTotal.toLocaleString(undefined, { maximumFractionDigits: 2 })}`}
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '6px', fontSize: '12.5px', color: 'var(--text-muted)' }}>
-                <span>Next cutoff: Oct 28, 2026</span>
+                <span>{payrollLoading ? 'Loading payroll records' : payrollError ? 'Payroll data unavailable' : formattedPayrollPeriod ? `Pay period: ${formattedPayrollPeriod}` : 'No payroll runs recorded'}</span>
               </div>
             </div>
           </div>
@@ -243,13 +266,21 @@ export const AdminDashboardView: React.FC = () => {
                   onClick={() => setCurrentView('leaves')} 
                   style={{ fontSize: '12.5px', color: '#0052FF', background: 'none', border: 'none', fontWeight: '600', cursor: 'pointer' }}
                 >
-                  View all ({leaves.length}) →
+                  View all ({leavesLoading ? '…' : leaves.length}) →
                 </button>
               </div>
 
-              {pendingLeaves.length === 0 ? (
+              {leavesError ? (
+                <div role="alert" style={{ padding: '24px 0', textAlign: 'center', color: '#CF202F', fontSize: '13.5px' }}>
+                  Unable to load leave requests: {leavesError}
+                </div>
+              ) : leavesLoading ? (
                 <div style={{ padding: '40px 0', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13.5px' }}>
-                  ✓ All leave applications have been reviewed.
+                  Loading leave requests…
+                </div>
+              ) : pendingLeaves.length === 0 ? (
+                <div style={{ padding: '40px 0', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13.5px' }}>
+                  ✓ No pending leave applications.
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -326,7 +357,13 @@ export const AdminDashboardView: React.FC = () => {
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                {projects.slice(0, 3).map(proj => (
+                {projectsLoading ? (
+                  <div style={{ padding: '20px 0', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px' }}>Loading projects…</div>
+                ) : projectsError ? (
+                  <div role="alert" style={{ padding: '20px 0', textAlign: 'center', color: '#CF202F', fontSize: '13px' }}>Unable to load projects: {projectsError}</div>
+                ) : activeProjects.length === 0 ? (
+                  <div style={{ padding: '20px 0', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px' }}>No active projects.</div>
+                ) : activeProjects.slice(0, 3).map(proj => (
                   <div key={proj.id} style={{ borderBottom: '1px solid var(--border-light)', paddingBottom: '14px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
                       <span style={{ fontWeight: '600', fontSize: '13.5px', color: 'var(--text-main)' }}>{proj.name}</span>

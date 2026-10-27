@@ -3,27 +3,24 @@ import { ShieldCheck, ArrowRight, AlertCircle, Eye, EyeOff, Lock, Mail, CheckCir
 import { useERP } from '../../context/ERPContext';
 
 export const LoginView: React.FC = () => {
-  const { login, setCurrentView, setFigmaOverlayAsset } = useERP();
+  const { login, authError, setFigmaOverlayAsset, setCurrentView } = useERP();
   
-  const [email, setEmail] = useState('alexander.wright@aavil.inc');
-  const [password, setPassword] = useState('securePass123!');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [demoState, setDemoState] = useState<'default' | 'error'>('default');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
-
-    if (demoState === 'error') {
-      setErrorMessage('Invalid email or password. Please verify your credentials and try again.');
-      return;
-    }
-
-    const res = login(email, password);
-    if (!res.success && res.error) {
-      setErrorMessage(res.error);
+    setIsSubmitting(true);
+    try {
+      const result = await login(email, password, rememberMe);
+      if (!result.success) setErrorMessage(result.error ?? 'Unable to sign in.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -145,55 +142,6 @@ export const LoginView: React.FC = () => {
         padding: '48px',
         backgroundColor: '#FFFFFF'
       }}>
-        {/* State Toggle Bar (Test Default vs Error state) */}
-        <div style={{
-          marginBottom: '32px',
-          background: '#F1F3F5',
-          padding: '4px',
-          borderRadius: '8px',
-          display: 'flex',
-          gap: '4px',
-          fontSize: '12px'
-        }}>
-          <button
-            type="button"
-            onClick={() => {
-              setDemoState('default');
-              setErrorMessage(null);
-            }}
-            style={{
-              padding: '6px 14px',
-              borderRadius: '6px',
-              border: 'none',
-              cursor: 'pointer',
-              fontWeight: '600',
-              backgroundColor: demoState === 'default' ? '#FFFFFF' : 'transparent',
-              color: demoState === 'default' ? '#0A0B0D' : '#5B616E',
-              boxShadow: demoState === 'default' ? 'var(--shadow-xs)' : 'none'
-            }}
-          >
-            Figma State: Default
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setDemoState('error');
-              setErrorMessage('Invalid email or password. Please verify your credentials and try again.');
-            }}
-            style={{
-              padding: '6px 14px',
-              borderRadius: '6px',
-              border: 'none',
-              cursor: 'pointer',
-              fontWeight: '600',
-              backgroundColor: demoState === 'error' ? '#CF202F' : 'transparent',
-              color: demoState === 'error' ? '#FFFFFF' : '#5B616E'
-            }}
-          >
-            Figma State: Error ⚠️
-          </button>
-        </div>
-
         <div style={{ width: '100%', maxWidth: '400px' }}>
           <div style={{ marginBottom: '32px' }}>
             <h2 style={{ fontSize: '26px', fontWeight: '800', color: '#0A0B0D', letterSpacing: '-0.02em', margin: 0 }}>
@@ -205,7 +153,7 @@ export const LoginView: React.FC = () => {
           </div>
 
           {/* Error Banner (matching Figma Login — Error.svg) */}
-          {errorMessage && (
+          {(errorMessage || authError) && (
             <div style={{
               display: 'flex',
               alignItems: 'flex-start',
@@ -220,7 +168,7 @@ export const LoginView: React.FC = () => {
               animation: 'fadeIn 0.2s ease-out'
             }}>
               <AlertCircle size={16} style={{ flexShrink: 0, marginTop: '2px' }} />
-              <div>{errorMessage}</div>
+              <div>{errorMessage ?? authError}</div>
             </div>
           )}
 
@@ -233,6 +181,7 @@ export const LoginView: React.FC = () => {
                 <input 
                   type="email" 
                   required
+                  autoComplete="username"
                   value={email}
                   onChange={e => setEmail(e.target.value)}
                   placeholder="name@aavil.inc"
@@ -247,28 +196,13 @@ export const LoginView: React.FC = () => {
 
             {/* Password Field */}
             <div className="form-group">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <label className="form-label">Password</label>
-                <button
-                  type="button"
-                  onClick={() => setCurrentView('forgot-password')}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    color: '#0052FF',
-                    fontSize: '12.5px',
-                    fontWeight: '600',
-                    cursor: 'pointer'
-                  }}
-                >
-                  Forgot password?
-                </button>
-              </div>
+              <label className="form-label">Password</label>
               <div style={{ position: 'relative' }}>
                 <Lock size={16} style={{ position: 'absolute', left: '12px', top: '12px', color: '#8A8F98' }} />
                 <input 
                   type={showPassword ? 'text' : 'password'}
                   required
+                  autoComplete="current-password"
                   value={password}
                   onChange={e => setPassword(e.target.value)}
                   placeholder="••••••••••••"
@@ -297,6 +231,16 @@ export const LoginView: React.FC = () => {
               </div>
             </div>
 
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '-12px', marginBottom: '20px' }}>
+              <button
+                type="button"
+                onClick={() => setCurrentView('forgot-password')}
+                style={{ color: '#0052FF', background: 'none', border: 'none', fontSize: '13px', cursor: 'pointer', fontWeight: '600', padding: 0 }}
+              >
+                Forgot password?
+              </button>
+            </div>
+
             {/* Remember Me */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '24px' }}>
               <input 
@@ -314,6 +258,7 @@ export const LoginView: React.FC = () => {
             {/* Submit CTA */}
             <button
               type="submit"
+              disabled={isSubmitting}
               className="btn btn-primary"
               style={{
                 width: '100%',
@@ -322,25 +267,10 @@ export const LoginView: React.FC = () => {
                 fontWeight: '600'
               }}
             >
-              <span>Sign In to AAVIL ERP</span>
+              <span>{isSubmitting ? 'Signing In…' : 'Sign In to AAVIL ERP'}</span>
               <ArrowRight size={16} />
             </button>
           </form>
-
-          {/* Quick Demo Credentials */}
-          <div style={{
-            marginTop: '32px',
-            padding: '16px',
-            backgroundColor: '#F8F9FA',
-            borderRadius: '8px',
-            border: '1px solid #EEF0F3',
-            fontSize: '12px',
-            color: '#5B616E'
-          }}>
-            <div style={{ fontWeight: '600', color: '#0A0B0D', marginBottom: '6px' }}>Demo Credentials:</div>
-            <div>👑 <strong>Admin Login:</strong> alexander.wright@aavil.inc (triggers 2FA flow)</div>
-            <div style={{ marginTop: '4px' }}>👤 <strong>Employee Login:</strong> marcus.vance@aavil.inc</div>
-          </div>
         </div>
       </div>
     </div>

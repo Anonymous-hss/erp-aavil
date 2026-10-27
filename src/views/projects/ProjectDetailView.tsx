@@ -1,17 +1,34 @@
-import React, { useState } from 'react';
-import { ArrowLeft, Users, Calendar, DollarSign, CheckCircle2, Clock, Sparkles, Plus } from 'lucide-react';
+import React from 'react';
+import { ArrowLeft, CheckCircle2, Clock, Sparkles } from 'lucide-react';
 import { useERP } from '../../context/ERPContext';
 
 export const ProjectDetailView: React.FC = () => {
   const { 
     selectedProjectId, 
     projects, 
+    projectsLoading,
+    projectsError,
+    role,
     setCurrentView, 
     updateProjectProgress, 
     setFigmaOverlayAsset 
   } = useERP();
 
   const project = projects.find(p => p.id === selectedProjectId) || projects[0];
+
+  if (!project) {
+    return (
+      <div style={{ padding: '32px' }}>
+        <button className="btn btn-secondary btn-sm" onClick={() => setCurrentView('projects')}>
+          <ArrowLeft size={16} /> Back to Projects
+        </button>
+        {projectsError && <div role="alert" style={{ padding: '12px 16px', marginTop: '16px', color: '#CF202F', backgroundColor: '#FEECEE' }}>{projectsError}</div>}
+        <div className="card" style={{ padding: '40px', marginTop: '24px', textAlign: 'center' }}>
+          {projectsLoading ? 'Loading project…' : 'This project is unavailable or has not been assigned to you.'}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ padding: '32px' }}>
@@ -43,6 +60,7 @@ export const ProjectDetailView: React.FC = () => {
           <span>Compare Figma Detail View Spec</span>
         </button>
       </div>
+      {projectsError && <div role="alert" style={{ padding: '12px 16px', marginBottom: '16px', color: '#CF202F', backgroundColor: '#FEECEE' }}>{projectsError}</div>}
 
       {/* Main Project Header Card */}
       <div className="card" style={{ padding: '32px', marginBottom: '24px' }}>
@@ -86,18 +104,20 @@ export const ProjectDetailView: React.FC = () => {
         </div>
 
         {/* Progress Slider (Interactive update) */}
-        <div style={{ marginTop: '24px', paddingTop: '16px', borderTop: '1px solid var(--border-light)', display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <span style={{ fontSize: '12.5px', color: 'var(--text-secondary)', fontWeight: '600' }}>Update Progress:</span>
-          <input 
-            type="range"
-            min="0"
-            max="100"
-            value={project.progress}
-            onChange={e => updateProjectProgress(project.id, Number(e.target.value))}
-            style={{ width: '220px', accentColor: '#0052FF' }}
-          />
-          <span style={{ fontSize: '12.5px', fontWeight: '700', color: '#0052FF' }}>{project.progress}%</span>
-        </div>
+        {role === 'admin' && (
+          <div style={{ marginTop: '24px', paddingTop: '16px', borderTop: '1px solid var(--border-light)', display: 'flex', alignItems: 'center', gap: '16px' }}>
+            <span style={{ fontSize: '12.5px', color: 'var(--text-secondary)', fontWeight: '600' }}>Update Progress:</span>
+            <input
+              type="range"
+              min="0"
+              max="100"
+              value={project.progress}
+              onChange={event => void updateProjectProgress(project.id, Number(event.target.value))}
+              style={{ width: '220px', accentColor: '#0052FF' }}
+            />
+            <span style={{ fontSize: '12.5px', fontWeight: '700', color: '#0052FF' }}>{project.progress}%</span>
+          </div>
+        )}
       </div>
 
       {/* Grid: Financials & Team */}

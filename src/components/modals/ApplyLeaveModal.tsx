@@ -1,7 +1,21 @@
 import React, { useState } from 'react';
-import { X, Calendar as CalendarIcon, Sparkles } from 'lucide-react';
+import { X, Calendar as CalendarIcon } from 'lucide-react';
 import { useERP } from '../../context/ERPContext';
 import { LeaveType } from '../../types/erp';
+
+function countWeekdays(startDate: string, endDate: string): number {
+  if (!startDate || !endDate || endDate < startDate) return 0;
+
+  const date = new Date(`${startDate}T00:00:00.000Z`);
+  const end = new Date(`${endDate}T00:00:00.000Z`);
+  let total = 0;
+  while (date <= end) {
+    const day = date.getUTCDay();
+    if (day !== 0 && day !== 6) total += 1;
+    date.setUTCDate(date.getUTCDate() + 1);
+  }
+  return total;
+}
 
 interface Props {
   isOpen: boolean;
@@ -9,26 +23,31 @@ interface Props {
 }
 
 export const ApplyLeaveModal: React.FC<Props> = ({ isOpen, onClose }) => {
-  const { applyLeave, setFigmaOverlayAsset } = useERP();
+  const { applyLeave, leaveBalance, setFigmaOverlayAsset } = useERP();
 
   const [leaveType, setLeaveType] = useState<LeaveType>('Annual Leave');
-  const [startDate, setStartDate] = useState('2026-10-26');
-  const [endDate, setEndDate] = useState('2026-10-28');
-  const [days, setDays] = useState(3);
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
   const [reason, setReason] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const days = countWeekdays(startDate, endDate);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    applyLeave({
-      leaveType,
-      startDate,
-      endDate,
-      days: Number(days),
-      reason: reason || 'Personal time off requested.'
-    });
-    onClose();
+    setError(null);
+    setIsSubmitting(true);
+    try {
+      await applyLeave({ leaveType, startDate, endDate, reason });
+      onClose();
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : 'Unable to submit leave request.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -62,9 +81,9 @@ export const ApplyLeaveModal: React.FC<Props> = ({ isOpen, onClose }) => {
               value={leaveType}
               onChange={e => setLeaveType(e.target.value as LeaveType)}
             >
-              <option value="Annual Leave">Annual Leave (14 days left)</option>
-              <option value="Sick Leave">Sick Leave (8 days left)</option>
-              <option value="Casual Leave">Casual Leave (4 days left)</option>
+              <option value="Annual Leave">Annual Leave ({leaveBalance?.annual ?? 0} days available)</option>
+              <option value="Sick Leave">Sick Leave ({leaveBalance?.sick ?? 0} days available)</option>
+              <option value="Casual Leave">Casual Leave ({leaveBalance?.casual ?? 0} days available)</option>
               <option value="Maternity/Paternity">Maternity/Paternity</option>
               <option value="Unpaid Leave">Unpaid Leave</option>
             </select>
@@ -78,7 +97,10 @@ export const ApplyLeaveModal: React.FC<Props> = ({ isOpen, onClose }) => {
                 required
                 className="form-control"
                 value={startDate}
-                onChange={e => setStartDate(e.target.value)}
+                onChange={e => {
+                  setStartDate(e.target.value);
+                  if (endDate && e.target.value > endDate) setEndDate(e.target.value);
+                }}
               />
             </div>
             <div className="form-group">
@@ -94,16 +116,8 @@ export const ApplyLeaveModal: React.FC<Props> = ({ isOpen, onClose }) => {
           </div>
 
           <div className="form-group">
-            <label className="form-label">Total Business Days</label>
-            <input 
-              type="number"
-              min={1}
-              max={30}
-              required
-              className="form-control"
-              value={days}
-              onChange={e => setDays(Number(e.target.value))}
-            />
+            <label className="form-label">Total Business Days (Monday–Friday)</label>
+            <div className="form-control" aria-live="polite">{days}</div>
           </div>
 
           <div className="form-group">
@@ -117,6 +131,12 @@ export const ApplyLeaveModal: React.FC<Props> = ({ isOpen, onClose }) => {
               onChange={e => setReason(e.target.value)}
             />
           </div>
+
+          {error && (
+            <div role="alert" style={{ padding: '10px 12px', borderRadius: '8px', color: '#CF202F', backgroundColor: '#FEECEE', fontSize: '13px' }}>
+              {error}
+            </div>
+          )}
 
           <div style={{
             display: 'flex',
@@ -138,9 +158,9 @@ export const ApplyLeaveModal: React.FC<Props> = ({ isOpen, onClose }) => {
               <button type="button" onClick={onClose} className="btn btn-secondary">
                 Cancel
               </button>
-              <button type="submit" className="btn btn-primary">
+              <button type="submit" disabled={isSubmitting || days < 1} className="btn btn-primary">
                 <CalendarIcon size={16} />
-                <span>Submit Request</span>
+                <span>{isSubmitting ? 'Submitting…' : 'Submit Request'}</span>
               </button>
             </div>
           </div>

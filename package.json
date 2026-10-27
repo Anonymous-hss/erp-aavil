@@ -5,7 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "dev:api": "corepack pnpm --filter @aavil/backend dev",
+    "dev:all": "concurrently -k -n web,api -c cyan,green \"vite\" \"corepack pnpm --filter @aavil/backend dev\"",
+    "build": "tsc -b && corepack pnpm --filter @aavil/backend build && vite build",
+    "db:generate": "corepack pnpm --filter @aavil/backend db:generate",
+    "db:migrate": "corepack pnpm --filter @aavil/backend db:migrate",
+    "db:seed": "corepack pnpm --filter @aavil/backend db:seed",
     "lint": "oxlint",
     "preview": "vite preview"
   },
@@ -19,6 +24,7 @@
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
     "@vitejs/plugin-react": "^6.1.1",
+    "concurrently": "^9.2.1",
     "oxlint": "^1.81.0",
     "typescript": "~6.0.2",
     "vite": "^8.3.0"

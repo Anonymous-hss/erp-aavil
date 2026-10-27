@@ -1,46 +1,73 @@
 import React, { useState } from 'react';
-import { X, UserPlus, Sparkles } from 'lucide-react';
+import { X, UserPlus } from 'lucide-react';
 import { useERP } from '../../context/ERPContext';
 import { Employee } from '../../types/erp';
+import type { EmployeeInput } from '../../lib/api';
 
 interface Props {
   isOpen: boolean;
   onClose: () => void;
+  employee?: Employee;
 }
 
-export const AddEmployeeModal: React.FC<Props> = ({ isOpen, onClose }) => {
-  const { addEmployee, setFigmaOverlayAsset } = useERP();
+export const AddEmployeeModal: React.FC<Props> = props => (
+  props.isOpen ? <EmployeeFormModal key={props.employee?.id ?? 'new'} {...props} /> : null
+);
 
-  const [formData, setFormData] = useState({
-    firstName: '',
-    lastName: '',
-    email: '',
-    phone: '',
-    department: 'Engineering',
-    designation: '',
-    salary: 110000,
-    location: 'San Francisco, CA',
-    status: 'Active' as Employee['status'],
-    skills: 'React, TypeScript'
-  });
+const EmployeeFormModal: React.FC<Props> = ({ onClose, employee }) => {
+  const { addEmployee, updateEmployee, setFigmaOverlayAsset } = useERP();
+  const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  if (!isOpen) return null;
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    addEmployee({
-      firstName: formData.firstName,
-      lastName: formData.lastName,
-      email: formData.email || `${formData.firstName.toLowerCase()}.${formData.lastName.toLowerCase()}@aavil.inc`,
-      phone: formData.phone,
-      department: formData.department,
-      designation: formData.designation,
-      salary: Number(formData.salary),
-      location: formData.location,
-      status: formData.status,
-      skills: formData.skills.split(',').map(s => s.trim())
+  const [formData, setFormData] = useState<EmployeeInput>(() => employee ? {
+      firstName: employee.firstName,
+      lastName: employee.lastName,
+      email: employee.email,
+      phone: employee.phone,
+      avatar: employee.avatar,
+      role: employee.role,
+      department: employee.department,
+      designation: employee.designation,
+      joinDate: employee.joinDate,
+      salary: employee.salary,
+      location: employee.location,
+      status: employee.status,
+      manager: employee.manager,
+      skills: employee.skills,
+    } : {
+      firstName: '',
+      lastName: '',
+      email: '',
+      phone: '',
+      avatar: '/favicon.svg',
+      role: 'employee',
+      department: 'Engineering',
+      designation: '',
+      joinDate: '',
+      salary: 110000,
+      location: 'San Francisco, CA',
+      status: 'Active',
+      manager: '',
+      skills: ['React', 'TypeScript'],
     });
-    onClose();
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setIsSubmitting(true);
+    try {
+      const input = formData;
+      if (employee) {
+        await updateEmployee(employee.id, input);
+      } else {
+        await addEmployee(input);
+      }
+      onClose();
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : 'Unable to save employee.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -56,10 +83,10 @@ export const AddEmployeeModal: React.FC<Props> = ({ isOpen, onClose }) => {
         }}>
           <div>
             <h3 style={{ fontSize: '18px', fontWeight: '700', color: 'var(--text-main)', margin: 0 }}>
-              Add New Employee
+              {employee ? 'Edit Employee' : 'Add New Employee'}
             </h3>
             <p style={{ fontSize: '12.5px', color: 'var(--text-secondary)', margin: '2px 0 0 0' }}>
-              Create an organizational personnel record and assign system permissions.
+              Create an employee profile. You can issue a one-time login setup link after saving.
             </p>
           </div>
           <button 
@@ -72,6 +99,11 @@ export const AddEmployeeModal: React.FC<Props> = ({ isOpen, onClose }) => {
 
         {/* Form Body */}
         <form onSubmit={handleSubmit} style={{ padding: '24px' }}>
+          {error && (
+            <div role="alert" style={{ padding: '10px 12px', marginBottom: '16px', borderRadius: '8px', color: '#CF202F', backgroundColor: '#FEECEE', fontSize: '13px' }}>
+              {error}
+            </div>
+          )}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
             <div className="form-group">
               <label className="form-label">First Name *</label>
@@ -103,6 +135,7 @@ export const AddEmployeeModal: React.FC<Props> = ({ isOpen, onClose }) => {
               <label className="form-label">Corporate Email</label>
               <input 
                 type="email" 
+                required
                 className="form-control"
                 placeholder="name@aavil.inc"
                 value={formData.email}
@@ -152,6 +185,28 @@ export const AddEmployeeModal: React.FC<Props> = ({ isOpen, onClose }) => {
             </div>
           </div>
 
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+            <div className="form-group">
+              <label className="form-label">Join Date *</label>
+              <input
+                type="date"
+                required
+                className="form-control"
+                value={formData.joinDate}
+                onChange={e => setFormData({ ...formData, joinDate: e.target.value })}
+              />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Manager</label>
+              <input
+                type="text"
+                className="form-control"
+                value={formData.manager}
+                onChange={e => setFormData({ ...formData, manager: e.target.value })}
+              />
+            </div>
+          </div>
+
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px' }}>
             <div className="form-group">
               <label className="form-label">Base Salary ($)</label>
@@ -183,6 +238,7 @@ export const AddEmployeeModal: React.FC<Props> = ({ isOpen, onClose }) => {
                 <option value="Active">Active</option>
                 <option value="Probation">Probation</option>
                 <option value="On Leave">On Leave</option>
+                <option value="Inactive">Inactive</option>
               </select>
             </div>
           </div>
@@ -193,8 +249,8 @@ export const AddEmployeeModal: React.FC<Props> = ({ isOpen, onClose }) => {
               type="text" 
               className="form-control"
               placeholder="React, Node.js, GraphQL, Docker"
-              value={formData.skills}
-              onChange={e => setFormData({ ...formData, skills: e.target.value })}
+              value={formData.skills.join(', ')}
+              onChange={e => setFormData({ ...formData, skills: e.target.value.split(',').map(skill => skill.trim()).filter(Boolean) })}
             />
           </div>
 
@@ -218,9 +274,9 @@ export const AddEmployeeModal: React.FC<Props> = ({ isOpen, onClose }) => {
               <button type="button" onClick={onClose} className="btn btn-secondary">
                 Cancel
               </button>
-              <button type="submit" className="btn btn-primary">
+              <button type="submit" disabled={isSubmitting} className="btn btn-primary">
                 <UserPlus size={16} />
-                <span>Save Employee</span>
+                <span>{isSubmitting ? 'Saving…' : employee ? 'Save Changes' : 'Save Employee'}</span>
               </button>
             </div>
           </div>

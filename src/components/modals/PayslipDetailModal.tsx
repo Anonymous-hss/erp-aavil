@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, Download, Printer, ShieldCheck, Sparkles, Building2 } from 'lucide-react';
+import { X, Printer, Sparkles } from 'lucide-react';
 import { useERP } from '../../context/ERPContext';
 import { PayrollRecord } from '../../types/erp';
 
@@ -48,13 +48,6 @@ export const PayslipDetailModal: React.FC<Props> = ({ record, onClose }) => {
               <span>Print</span>
             </button>
             <button 
-              onClick={() => alert(`Downloaded Official Payslip: ${record.employeeCode}-${record.month}-${record.year}.pdf`)}
-              className="btn btn-primary btn-sm"
-            >
-              <Download size={14} />
-              <span>Download PDF</span>
-            </button>
-            <button 
               onClick={onClose}
               style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', marginLeft: '6px' }}
             >
@@ -75,10 +68,7 @@ export const PayslipDetailModal: React.FC<Props> = ({ record, onClose }) => {
                 <div style={{ fontSize: '18px', fontWeight: '800', color: '#0A0B0D' }}>AAVIL Inc.</div>
               </div>
               <div style={{ fontSize: '12px', color: '#5B616E', marginTop: '6px' }}>
-                100 Montgomery St, Suite 2400, San Francisco, CA 94104
-              </div>
-              <div style={{ fontSize: '11px', color: '#8A8F98' }}>
-                EIN / Tax ID: 84-2910482 • Corporate Payroll Division
+                Payroll record for informational purposes
               </div>
             </div>
 
@@ -88,7 +78,7 @@ export const PayslipDetailModal: React.FC<Props> = ({ record, onClose }) => {
                 Slip Ref: <strong>AAV-PAY-{record.id.toUpperCase()}</strong>
               </div>
               <div style={{ fontSize: '12px', color: '#5B616E' }}>
-                Disbursement Date: <strong>{record.paymentDate || 'October 20, 2026'}</strong>
+                Payment status date: <strong>{record.paymentDate || 'Not recorded'}</strong>
               </div>
             </div>
           </div>
@@ -196,7 +186,7 @@ export const PayslipDetailModal: React.FC<Props> = ({ record, onClose }) => {
                 Net Take-Home Pay
               </div>
               <div style={{ fontSize: '13px', color: '#DDE2E8', marginTop: '4px' }}>
-                Disbursed to Direct Deposit (Checking account ending in •••• 4092)
+                Status: {record.status}. No payment transfer is initiated by this application.
               </div>
             </div>
             <div style={{ fontSize: '32px', fontWeight: '800', color: '#FFFFFF', letterSpacing: '-0.02em' }}>

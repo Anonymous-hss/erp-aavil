@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Briefcase, Sparkles } from 'lucide-react';
+import { X, Briefcase } from 'lucide-react';
 import { useERP } from '../../context/ERPContext';
 
 interface Props {
@@ -8,28 +8,38 @@ interface Props {
 }
 
 export const AddProjectModal: React.FC<Props> = ({ isOpen, onClose }) => {
-  const { addProject, setFigmaOverlayAsset } = useERP();
+  const { addProject, employees, setFigmaOverlayAsset } = useERP();
 
   const [name, setName] = useState('');
   const [client, setClient] = useState('');
   const [budget, setBudget] = useState(150000);
   const [deadline, setDeadline] = useState('2026-12-31');
   const [description, setDescription] = useState('');
+  const [memberIds, setMemberIds] = useState<string[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    addProject({
-      name,
-      client,
-      budget: Number(budget),
-      deadline,
-      description,
-      status: 'Active',
-      progress: 0
-    });
-    onClose();
+    setError(null);
+    setIsSubmitting(true);
+    try {
+      await addProject({
+        name,
+        client,
+        budget: Number(budget),
+        deadline,
+        description,
+        memberIds,
+      });
+      onClose();
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : 'Unable to create project.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -114,6 +124,34 @@ export const AddProjectModal: React.FC<Props> = ({ isOpen, onClose }) => {
             />
           </div>
 
+          <div className="form-group">
+            <label className="form-label">Project team</label>
+            {employees.length === 0 ? (
+              <div style={{ color: 'var(--text-muted)', fontSize: '13px' }}>No employee profiles are available to assign.</div>
+            ) : (
+              <div style={{ maxHeight: '150px', overflowY: 'auto', border: '1px solid var(--border-default)', borderRadius: '6px', padding: '8px 12px' }}>
+                {employees.map(employee => (
+                  <label key={employee.id} style={{ display: 'flex', gap: '8px', alignItems: 'center', padding: '5px 0', fontSize: '13px' }}>
+                    <input
+                      type="checkbox"
+                      checked={memberIds.includes(employee.id)}
+                      onChange={event => setMemberIds(current => event.target.checked
+                        ? [...current, employee.id]
+                        : current.filter(id => id !== employee.id))}
+                    />
+                    {employee.firstName} {employee.lastName} · {employee.designation}
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {error && (
+            <div role="alert" style={{ padding: '10px 12px', marginBottom: '12px', borderRadius: '8px', color: '#CF202F', backgroundColor: '#FEECEE', fontSize: '13px' }}>
+              {error}
+            </div>
+          )}
+
           <div style={{
             display: 'flex',
             alignItems: 'center',
@@ -134,9 +172,9 @@ export const AddProjectModal: React.FC<Props> = ({ isOpen, onClose }) => {
               <button type="button" onClick={onClose} className="btn btn-secondary">
                 Cancel
               </button>
-              <button type="submit" className="btn btn-primary">
+              <button type="submit" disabled={isSubmitting} className="btn btn-primary">
                 <Briefcase size={16} />
-                <span>Create Project</span>
+                <span>{isSubmitting ? 'Creating…' : 'Create Project'}</span>
               </button>
             </div>
           </div>

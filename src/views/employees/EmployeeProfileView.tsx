@@ -4,15 +4,10 @@ import {
   Mail, 
   Phone, 
   MapPin, 
-  Calendar, 
-  DollarSign, 
-  UserCheck, 
-  Briefcase, 
   Sparkles,
-  ShieldCheck,
-  Award
 } from 'lucide-react';
 import { useERP } from '../../context/ERPContext';
+import { AddEmployeeModal } from '../../components/modals/AddEmployeeModal';
 
 export const EmployeeProfileView: React.FC = () => {
   const { 
@@ -20,16 +15,28 @@ export const EmployeeProfileView: React.FC = () => {
     employees, 
     setCurrentView, 
     currentUser, 
+    role,
+    employeesLoading,
     projects, 
     setFigmaOverlayAsset 
   } = useERP();
 
   const [activeTab, setActiveTab] = useState<'overview' | 'employment' | 'leaves' | 'projects'>('overview');
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
-  const employee = employees.find(e => e.id === selectedEmployeeId) || employees[0];
-  const assignedProjects = projects.filter(p => p.team.some(m => m.id === employee.id));
+  const employee = employees.find(e => e.id === selectedEmployeeId)
+    ?? employees.find(e => e.email.toLowerCase() === currentUser.email.toLowerCase());
+  const assignedProjects = employee ? projects.filter(p => p.team.some(m => m.id === employee.id)) : [];
 
-  const isSelf = currentUser.id === employee.id;
+  if (!employee) {
+    return (
+      <div style={{ padding: '32px', color: 'var(--text-secondary)' }}>
+        {employeesLoading ? 'Loading employee profile…' : 'Employee profile not found or you do not have permission to view it.'}
+      </div>
+    );
+  }
+
+  const isSelf = currentUser.email.toLowerCase() === employee.email.toLowerCase();
 
   return (
     <div style={{ padding: '32px' }}>
@@ -113,9 +120,11 @@ export const EmployeeProfileView: React.FC = () => {
               <Mail size={14} />
               <span>Send Email</span>
             </button>
-            <button className="btn btn-primary btn-sm">
-              <span>Edit Record</span>
-            </button>
+            {role === 'admin' && (
+              <button onClick={() => setIsEditModalOpen(true)} className="btn btn-primary btn-sm">
+                <span>Edit Record</span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -281,6 +290,13 @@ export const EmployeeProfileView: React.FC = () => {
             ))}
           </div>
         </div>
+      )}
+      {role === 'admin' && (
+        <AddEmployeeModal
+          isOpen={isEditModalOpen}
+          onClose={() => setIsEditModalOpen(false)}
+          employee={employee}
+        />
       )}
     </div>
   );

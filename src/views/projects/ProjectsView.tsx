@@ -1,13 +1,9 @@
 import React, { useState } from 'react';
 import { 
-  Briefcase, 
   Plus, 
   Search, 
   Sparkles, 
   ChevronRight, 
-  Users, 
-  Clock, 
-  CheckCircle2,
   FolderOpen
 } from 'lucide-react';
 import { useERP } from '../../context/ERPContext';
@@ -16,6 +12,9 @@ import { AddProjectModal } from '../../components/modals/AddProjectModal';
 export const ProjectsView: React.FC = () => {
   const { 
     projects, 
+    projectsLoading,
+    projectsError,
+    role,
     setCurrentView, 
     setSelectedProjectId, 
     setFigmaOverlayAsset 
@@ -94,13 +93,15 @@ export const ProjectsView: React.FC = () => {
             <Sparkles size={14} color="#0052FF" />
             <span>Compare Figma Spec</span>
           </button>
-          <button
-            onClick={() => setIsAddModalOpen(true)}
-            className="btn btn-primary"
-          >
-            <Plus size={16} />
-            <span>Add Project</span>
-          </button>
+          {role === 'admin' && (
+            <button
+              onClick={() => setIsAddModalOpen(true)}
+              className="btn btn-primary"
+            >
+              <Plus size={16} />
+              <span>Add Project</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -126,6 +127,11 @@ export const ProjectsView: React.FC = () => {
         </div>
       ) : (
         <>
+          {projectsError && (
+            <div role="alert" style={{ padding: '12px 16px', marginBottom: '16px', borderRadius: '8px', color: '#CF202F', backgroundColor: '#FEECEE' }}>
+              {projectsError}
+            </div>
+          )}
           {/* Search & Filter Bar */}
           <div className="card" style={{ padding: '16px 20px', marginBottom: '24px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px' }}>
@@ -166,6 +172,13 @@ export const ProjectsView: React.FC = () => {
           </div>
 
           {/* Project Cards Grid */}
+          {projectsLoading ? (
+            <div className="card" style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>Loading projects…</div>
+          ) : filteredProjects.length === 0 ? (
+            <div className="card" style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
+              No projects are assigned or match this search.
+            </div>
+          ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '24px' }}>
             {filteredProjects.map(project => (
               <div 
@@ -241,6 +254,7 @@ export const ProjectsView: React.FC = () => {
               </div>
             ))}
           </div>
+          )}
         </>
       )}
 

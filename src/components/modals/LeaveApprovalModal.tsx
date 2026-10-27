@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Check, AlertTriangle, Sparkles, CheckCircle2 } from 'lucide-react';
+import { X, Check, CheckCircle2 } from 'lucide-react';
 import { useERP } from '../../context/ERPContext';
 import { LeaveRequest } from '../../types/erp';
 
@@ -12,12 +12,22 @@ export const LeaveApprovalModal: React.FC<Props> = ({ leave, onClose }) => {
   const { reviewLeave, setFigmaOverlayAsset } = useERP();
   const [note, setNote] = useState('');
   const [resultState, setResultState] = useState<'approved' | 'rejected' | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   if (!leave) return null;
 
-  const handleAction = (status: 'Approved' | 'Rejected') => {
-    reviewLeave(leave.id, status, note);
-    setResultState(status === 'Approved' ? 'approved' : 'rejected');
+  const handleAction = async (status: 'Approved' | 'Rejected') => {
+    setError(null);
+    setIsSubmitting(true);
+    try {
+      await reviewLeave(leave.id, status, note);
+      setResultState(status === 'Approved' ? 'approved' : 'rejected');
+    } catch (reviewError) {
+      setError(reviewError instanceof Error ? reviewError.message : 'Unable to review leave request.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -64,7 +74,7 @@ export const LeaveApprovalModal: React.FC<Props> = ({ leave, onClose }) => {
               {resultState === 'approved' ? 'Leave Application Approved' : 'Leave Application Rejected'}
             </h4>
             <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '6px' }}>
-              Notification email sent to {leave.employeeName}. Calendar updated accordingly.
+              The request status has been saved. Email notifications and calendar sync are not enabled yet.
             </p>
             <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', marginTop: '24px' }}>
               <button
@@ -142,6 +152,12 @@ export const LeaveApprovalModal: React.FC<Props> = ({ leave, onClose }) => {
               />
             </div>
 
+            {error && (
+              <div role="alert" style={{ padding: '10px 12px', marginTop: '12px', borderRadius: '8px', color: '#CF202F', backgroundColor: '#FEECEE', fontSize: '13px' }}>
+                {error}
+              </div>
+            )}
+
             <div style={{
               display: 'flex',
               alignItems: 'center',
@@ -161,6 +177,7 @@ export const LeaveApprovalModal: React.FC<Props> = ({ leave, onClose }) => {
               <div style={{ display: 'flex', gap: '10px' }}>
                 <button
                   type="button"
+                  disabled={isSubmitting}
                   onClick={() => handleAction('Rejected')}
                   className="btn btn-sm"
                   style={{ backgroundColor: '#FEECEE', color: '#CF202F', border: '1px solid #F7BAC0' }}
@@ -170,6 +187,7 @@ export const LeaveApprovalModal: React.FC<Props> = ({ leave, onClose }) => {
                 </button>
                 <button
                   type="button"
+                  disabled={isSubmitting}
                   onClick={() => handleAction('Approved')}
                   className="btn btn-sm btn-primary"
                   style={{ backgroundColor: '#05B169', borderColor: '#05B169' }}

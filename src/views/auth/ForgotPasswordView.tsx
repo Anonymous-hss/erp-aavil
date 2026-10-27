@@ -1,117 +1,84 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Mail, CheckCircle2, ShieldAlert } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Mail, ShieldAlert } from 'lucide-react';
+import { authApi } from '../../lib/api';
 import { useERP } from '../../context/ERPContext';
 
 export const ForgotPasswordView: React.FC = () => {
   const { setCurrentView, setFigmaOverlayAsset } = useERP();
-  const [email, setEmail] = useState('alexander.wright@aavil.inc');
+  const [email, setEmail] = useState('');
+  const [error, setError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setSubmitted(true);
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setError(null);
+    setIsSubmitting(true);
+    try {
+      await authApi.requestPasswordReset(email);
+      setSubmitted(true);
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : 'Unable to request a password reset.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
-    <div style={{
-      display: 'flex',
-      minHeight: '100vh',
-      backgroundColor: '#F8F9FA',
-      alignItems: 'center',
-      justifyContent: 'center',
-      padding: '24px'
-    }}>
+    <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: '#F8F9FA', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
       <div className="card" style={{ maxWidth: '440px', width: '100%', padding: '40px', borderRadius: '16px', boxShadow: 'var(--shadow-md)' }}>
         <button
           onClick={() => setCurrentView('login')}
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '6px',
-            color: '#5B616E',
-            background: 'none',
-            border: 'none',
-            fontSize: '13px',
-            cursor: 'pointer',
-            fontWeight: '500',
-            marginBottom: '24px'
-          }}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', color: '#5B616E', background: 'none', border: 'none', fontSize: '13px', cursor: 'pointer', fontWeight: '500', marginBottom: '24px' }}
         >
           <ArrowLeft size={16} />
           <span>Back to sign in</span>
         </button>
-
-        <div style={{
-          width: '48px',
-          height: '48px',
-          borderRadius: '12px',
-          backgroundColor: '#E5EDFF',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          color: '#0052FF',
-          marginBottom: '20px'
-        }}>
-          <ShieldAlert size={24} />
+        <div style={{ width: '48px', height: '48px', borderRadius: '12px', backgroundColor: '#E5EDFF', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0052FF', marginBottom: '20px' }}>
+          {submitted ? <CheckCircle2 size={24} /> : <ShieldAlert size={24} />}
         </div>
-
         <h2 style={{ fontSize: '24px', fontWeight: '800', color: '#0A0B0D', letterSpacing: '-0.02em', margin: 0 }}>
-          Reset your password
+          {submitted ? 'Check your email' : 'Reset your password'}
         </h2>
-        <p style={{ fontSize: '13.5px', color: '#5B616E', marginTop: '8px', lineHeight: '1.5' }}>
-          Enter the corporate email address associated with your AAVIL account and we’ll send a secure one-time verification link.
-        </p>
-
         {submitted ? (
-          <div style={{
-            marginTop: '28px',
-            padding: '20px',
-            backgroundColor: '#E3F6EC',
-            borderRadius: '12px',
-            border: '1px solid #A3E6C5',
-            textAlign: 'center'
-          }}>
-            <CheckCircle2 size={32} color="#05B169" style={{ margin: '0 auto 12px auto' }} />
-            <div style={{ fontWeight: '700', color: '#0A0B0D', fontSize: '15px' }}>Reset link sent!</div>
-            <p style={{ fontSize: '13px', color: '#5B616E', marginTop: '6px' }}>
-              We have dispatched instructions to <strong>{email}</strong>. Check your inbox and spam folders.
-            </p>
-            <button
-              onClick={() => setCurrentView('login')}
-              className="btn btn-primary"
-              style={{ marginTop: '16px', width: '100%' }}
-            >
-              Return to Login
-            </button>
-          </div>
+          <p role="status" style={{ fontSize: '13.5px', color: '#5B616E', marginTop: '8px', lineHeight: '1.5' }}>
+            If an active account matches that email, a password reset link will be sent shortly. The link expires after 60 minutes. If you do not receive it, contact an administrator.
+          </p>
         ) : (
-          <form onSubmit={handleSubmit} style={{ marginTop: '28px' }}>
-            <div className="form-group">
-              <label className="form-label">Corporate Email</label>
-              <div style={{ position: 'relative' }}>
-                <Mail size={16} style={{ position: 'absolute', left: '12px', top: '12px', color: '#8A8F98' }} />
-                <input 
-                  type="email" 
-                  required
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
-                  placeholder="name@aavil.inc"
-                  className="form-control"
-                  style={{ paddingLeft: '38px' }}
-                />
+          <>
+            <p style={{ fontSize: '13.5px', color: '#5B616E', marginTop: '8px', lineHeight: '1.5' }}>
+              Enter your work email and, if it matches an active account, we’ll send you a one-time reset link.
+            </p>
+            <form onSubmit={submit} style={{ marginTop: '24px' }}>
+              <div className="form-group">
+                <label className="form-label" htmlFor="reset-email">Corporate email</label>
+                <div style={{ position: 'relative' }}>
+                  <Mail size={16} style={{ position: 'absolute', left: '12px', top: '12px', color: '#8A8F98' }} />
+                  <input
+                    id="reset-email"
+                    type="email"
+                    required
+                    maxLength={254}
+                    autoComplete="email"
+                    className="form-control"
+                    style={{ paddingLeft: '38px' }}
+                    placeholder="name@aavil.inc"
+                    value={email}
+                    onChange={event => setEmail(event.target.value)}
+                  />
+                </div>
               </div>
-            </div>
-
-            <button
-              type="submit"
-              className="btn btn-primary"
-              style={{ width: '100%', padding: '12px', marginTop: '8px' }}
-            >
-              Send Password Reset Link
-            </button>
-          </form>
+              {error && (
+                <div role="alert" style={{ padding: '10px 12px', marginBottom: '16px', borderRadius: '8px', color: '#CF202F', backgroundColor: '#FEECEE', fontSize: '13px' }}>
+                  {error}
+                </div>
+              )}
+              <button type="submit" disabled={isSubmitting} className="btn btn-primary" style={{ width: '100%', padding: '12px' }}>
+                {isSubmitting ? 'Sending…' : 'Send reset link'}
+              </button>
+            </form>
+          </>
         )}
-
         <div style={{ marginTop: '24px', textAlign: 'center' }}>
           <button
             onClick={() => setFigmaOverlayAsset('/design-assets/Forgot Password.svg')}

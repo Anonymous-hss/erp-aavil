@@ -6,8 +6,9 @@ import { FigmaCompareModal } from './components/modals/FigmaCompareModal';
 
 // Auth Views
 import { LoginView } from './views/auth/LoginView';
+import { AccountSetupView } from './views/auth/AccountSetupView';
 import { ForgotPasswordView } from './views/auth/ForgotPasswordView';
-import { TwoFactorAuthView } from './views/auth/TwoFactorAuthView';
+import { PasswordResetView } from './views/auth/PasswordResetView';
 
 // App Views
 import { AdminDashboardView } from './views/dashboard/AdminDashboardView';
@@ -22,17 +23,23 @@ import { TimesheetsView } from './views/timesheets/TimesheetsView';
 import { AppraisalsView } from './views/appraisals/AppraisalsView';
 
 const AppContent: React.FC = () => {
-  const { isAuthenticated, currentView, role } = useERP();
+  const { isAuthenticated, isAuthLoading, authError, currentView, role } = useERP();
 
-  // If user is not authenticated or explicitly viewing auth flows
+  if (window.location.pathname === '/account/setup') {
+    return <AccountSetupView />;
+  }
+
+  if (window.location.pathname === '/account/password-reset') {
+    return <PasswordResetView />;
+  }
+
+  if (isAuthLoading) {
+    return <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', color: 'var(--text-secondary)' }}>Checking your session…</div>;
+  }
+
+  // Wait until the API has checked the session before showing the app.
   if (!isAuthenticated) {
-    if (currentView === 'forgot-password') {
-      return <ForgotPasswordView />;
-    }
-    if (currentView === 'two-factor') {
-      return <TwoFactorAuthView />;
-    }
-    return <LoginView />;
+    return currentView === 'forgot-password' ? <ForgotPasswordView /> : <LoginView />;
   }
 
   // Active Main View Router
@@ -69,6 +76,11 @@ const AppContent: React.FC = () => {
       {/* Main Workspace Area */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, backgroundColor: 'var(--bg-canvas)' }}>
         <Header />
+        {authError && (
+          <div role="alert" style={{ padding: '12px 24px', color: '#CF202F', backgroundColor: '#FEECEE' }}>
+            {authError}
+          </div>
+        )}
         <main style={{ flex: 1, overflowY: 'auto' }}>
           {renderMainView()}
         </main>

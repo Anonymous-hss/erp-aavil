@@ -1,15 +1,5 @@
 import React, { useState } from 'react';
-import { 
-  Calendar as CalendarIcon, 
-  Plus, 
-  Check, 
-  X, 
-  Filter, 
-  Clock, 
-  UserCheck, 
-  Sparkles,
-  ChevronRight
-} from 'lucide-react';
+import { Plus, Sparkles, ChevronRight } from 'lucide-react';
 import { useERP } from '../../context/ERPContext';
 import { LeaveRequest } from '../../types/erp';
 import { ApplyLeaveModal } from '../../components/modals/ApplyLeaveModal';
@@ -18,8 +8,10 @@ import { LeaveApprovalModal } from '../../components/modals/LeaveApprovalModal';
 export const LeavesView: React.FC = () => {
   const { 
     leaves, 
+    leavesLoading,
+    leavesError,
+    leaveBalance,
     role, 
-    currentUser, 
     setFigmaOverlayAsset 
   } = useERP();
 
@@ -89,25 +81,25 @@ export const LeavesView: React.FC = () => {
         <div className="card" style={{ padding: '20px' }}>
           <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: '600' }}>ANNUAL VACATION</span>
           <div style={{ fontSize: '26px', fontWeight: '800', color: '#0052FF', marginTop: '4px' }}>
-            14 / 20 <span style={{ fontSize: '13px', fontWeight: '500', color: 'var(--text-muted)' }}>days</span>
+            {leaveBalance ? `${leaveBalance.annual} / ${leaveBalance.annualTotal}` : '— / —'} <span style={{ fontSize: '13px', fontWeight: '500', color: 'var(--text-muted)' }}>days</span>
           </div>
-          <div style={{ fontSize: '12px', color: '#05B169', marginTop: '4px' }}>Accruing +1.66 d/mo</div>
+          <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>Current balance</div>
         </div>
 
         <div className="card" style={{ padding: '20px' }}>
           <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: '600' }}>SICK / MEDICAL</span>
           <div style={{ fontSize: '26px', fontWeight: '800', color: '#05B169', marginTop: '4px' }}>
-            8 / 10 <span style={{ fontSize: '13px', fontWeight: '500', color: 'var(--text-muted)' }}>days</span>
+            {leaveBalance ? `${leaveBalance.sick} / ${leaveBalance.sickTotal}` : '— / —'} <span style={{ fontSize: '13px', fontWeight: '500', color: 'var(--text-muted)' }}>days</span>
           </div>
-          <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>Resets Jan 1, 2027</div>
+          <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>Current balance</div>
         </div>
 
         <div className="card" style={{ padding: '20px' }}>
           <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: '600' }}>CASUAL / PERSONAL</span>
           <div style={{ fontSize: '26px', fontWeight: '800', color: '#F4B000', marginTop: '4px' }}>
-            4 / 6 <span style={{ fontSize: '13px', fontWeight: '500', color: 'var(--text-muted)' }}>days</span>
+            {leaveBalance ? `${leaveBalance.casual} / ${leaveBalance.casualTotal}` : '— / —'} <span style={{ fontSize: '13px', fontWeight: '500', color: 'var(--text-muted)' }}>days</span>
           </div>
-          <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>Short-notice allowance</div>
+          <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>Current balance</div>
         </div>
 
         <div className="card" style={{ padding: '20px' }}>
@@ -115,7 +107,7 @@ export const LeavesView: React.FC = () => {
           <div style={{ fontSize: '26px', fontWeight: '800', color: '#B45309', marginTop: '4px' }}>
             {leaves.filter(l => l.status === 'Pending').length} <span style={{ fontSize: '13px', fontWeight: '500', color: 'var(--text-muted)' }}>awaiting</span>
           </div>
-          <div style={{ fontSize: '12px', color: '#B45309', marginTop: '4px' }}>Avg response: 4.2 hrs</div>
+          <div style={{ fontSize: '12px', color: '#B45309', marginTop: '4px' }}>Awaiting administrator review</div>
         </div>
       </div>
 
@@ -133,6 +125,11 @@ export const LeavesView: React.FC = () => {
       </div>
 
       {/* Leave Requests Table */}
+      {leavesError && (
+        <div role="alert" style={{ padding: '12px 16px', marginBottom: '16px', borderRadius: '8px', color: '#CF202F', backgroundColor: '#FEECEE' }}>
+          {leavesError}
+        </div>
+      )}
       <div className="table-container">
         <table className="erp-table">
           <thead>
@@ -147,7 +144,13 @@ export const LeavesView: React.FC = () => {
             </tr>
           </thead>
           <tbody>
-            {displayedLeaves.length === 0 ? (
+            {leavesLoading ? (
+              <tr>
+                <td colSpan={7} style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
+                  Loading leave requests…
+                </td>
+              </tr>
+            ) : displayedLeaves.length === 0 ? (
               <tr>
                 <td colSpan={7} style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
                   No leave requests in this category.
@@ -229,6 +232,7 @@ export const LeavesView: React.FC = () => {
       />
 
       <LeaveApprovalModal 
+        key={selectedReviewLeave?.id ?? 'closed'}
         leave={selectedReviewLeave}
         onClose={() => setSelectedReviewLeave(null)}
       />

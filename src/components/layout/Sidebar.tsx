@@ -15,7 +15,7 @@ import { useERP } from '../../context/ERPContext';
 import { AppView } from '../../types/erp';
 
 export const Sidebar: React.FC = () => {
-  const { currentView, setCurrentView, currentUser, role, setRole, logout, setFigmaOverlayAsset } = useERP();
+  const { currentView, setCurrentView, currentUser, role, logout, setFigmaOverlayAsset } = useERP();
 
   const menuItems: { id: AppView; label: string; icon: React.ReactNode; specAsset?: string }[] = [
     { 
@@ -103,61 +103,6 @@ export const Sidebar: React.FC = () => {
             <span style={{ fontSize: '10px', background: 'rgba(0, 82, 255, 0.25)', color: '#3880FF', padding: '1px 6px', borderRadius: '4px' }}>v2.0</span>
           </div>
           <div style={{ color: 'var(--dark-text-muted)', fontSize: '11px', fontWeight: '500' }}>Enterprise Suite</div>
-        </div>
-      </div>
-
-      {/* Role Switcher Pill */}
-      <div style={{ padding: '16px 20px 8px 20px' }}>
-        <div style={{
-          background: 'var(--dark-surface)',
-          padding: '4px',
-          borderRadius: '8px',
-          display: 'flex',
-          gap: '4px',
-          border: '1px solid var(--dark-border)'
-        }}>
-          <button
-            onClick={() => setRole('admin')}
-            style={{
-              flex: 1,
-              padding: '6px 8px',
-              border: 'none',
-              borderRadius: '6px',
-              fontSize: '11px',
-              fontWeight: '600',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '4px',
-              backgroundColor: role === 'admin' ? 'var(--primary)' : 'transparent',
-              color: role === 'admin' ? '#FFFFFF' : 'var(--dark-text-muted)',
-              transition: 'all 0.15s ease'
-            }}
-          >
-            👑 Admin
-          </button>
-          <button
-            onClick={() => setRole('employee')}
-            style={{
-              flex: 1,
-              padding: '6px 8px',
-              border: 'none',
-              borderRadius: '6px',
-              fontSize: '11px',
-              fontWeight: '600',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '4px',
-              backgroundColor: role === 'employee' ? 'var(--primary)' : 'transparent',
-              color: role === 'employee' ? '#FFFFFF' : 'var(--dark-text-muted)',
-              transition: 'all 0.15s ease'
-            }}
-          >
-            👤 Employee
-          </button>
         </div>
       </div>
 

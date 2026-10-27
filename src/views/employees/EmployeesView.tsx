@@ -2,13 +2,14 @@ import React, { useState } from 'react';
 import { 
   Search, 
   UserPlus, 
-  Filter, 
   ChevronRight, 
-  MoreHorizontal, 
-  Download, 
   MapPin, 
-  Briefcase,
-  Sparkles
+  Sparkles,
+  KeyRound,
+  UserCheck,
+  UserX,
+  Copy,
+  X,
 } from 'lucide-react';
 import { useERP } from '../../context/ERPContext';
 import { AddEmployeeModal } from '../../components/modals/AddEmployeeModal';
@@ -16,6 +17,10 @@ import { AddEmployeeModal } from '../../components/modals/AddEmployeeModal';
 export const EmployeesView: React.FC = () => {
   const { 
     employees, 
+    employeesLoading,
+    role,
+    issueEmployeeAccessLink,
+    setEmployeeAccountActive,
     setCurrentView, 
     setSelectedEmployeeId, 
     setFigmaOverlayAsset 
@@ -25,8 +30,11 @@ export const EmployeesView: React.FC = () => {
   const [selectedDept, setSelectedDept] = useState('All');
   const [selectedStatus, setSelectedStatus] = useState('All');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [accessLink, setAccessLink] = useState<{ employeeName: string; url: string; purpose: 'setup' | 'reset'; expiresAt: string } | null>(null);
+  const [accountActionError, setAccountActionError] = useState<string | null>(null);
+  const [pendingAccountAction, setPendingAccountAction] = useState<string | null>(null);
 
-  const departments = ['All', 'Engineering', 'Design', 'Product', 'Sales', 'Marketing'];
+  const departments = ['All', ...new Set(employees.map(employee => employee.department))];
 
   const filteredEmployees = employees.filter(emp => {
     const fullName = `${emp.firstName} ${emp.lastName}`.toLowerCase();
@@ -48,6 +56,45 @@ export const EmployeesView: React.FC = () => {
         return <span className="badge badge-primary"><span className="badge-dot" />Probation</span>;
       default:
         return <span className="badge badge-neutral"><span className="badge-dot" />{status}</span>;
+    }
+  };
+
+  const createAccessLink = async (employeeId: string, employeeName: string) => {
+    setPendingAccountAction(employeeId);
+    setAccountActionError(null);
+    try {
+      const result = await issueEmployeeAccessLink(employeeId);
+      setAccessLink({
+        employeeName,
+        url: new URL(result.accessPath, window.location.origin).toString(),
+        purpose: result.purpose,
+        expiresAt: result.expiresAt,
+      });
+    } catch (error) {
+      setAccountActionError(error instanceof Error ? error.message : 'Unable to create an access link.');
+    } finally {
+      setPendingAccountAction(null);
+    }
+  };
+
+  const updateAccountAccess = async (employeeId: string, isActive: boolean) => {
+    setPendingAccountAction(employeeId);
+    setAccountActionError(null);
+    try {
+      await setEmployeeAccountActive(employeeId, isActive);
+    } catch (error) {
+      setAccountActionError(error instanceof Error ? error.message : 'Unable to update account access.');
+    } finally {
+      setPendingAccountAction(null);
+    }
+  };
+
+  const copyAccessLink = async () => {
+    if (!accessLink) return;
+    try {
+      await navigator.clipboard.writeText(accessLink.url);
+    } catch {
+      setAccountActionError('Clipboard access was blocked. Select and copy the access link manually.');
     }
   };
 
@@ -75,13 +122,15 @@ export const EmployeesView: React.FC = () => {
             <Sparkles size={14} color="#0052FF" />
             <span>Compare Figma Directory</span>
           </button>
-          <button
-            onClick={() => setIsAddModalOpen(true)}
-            className="btn btn-primary"
-          >
-            <UserPlus size={16} />
-            <span>Add Employee</span>
-          </button>
+          {role === 'admin' && (
+            <button
+              onClick={() => setIsAddModalOpen(true)}
+              className="btn btn-primary"
+            >
+              <UserPlus size={16} />
+              <span>Add Employee</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -145,6 +194,7 @@ export const EmployeesView: React.FC = () => {
               <option value="Active">Active</option>
               <option value="On Leave">On Leave</option>
               <option value="Probation">Probation</option>
+              <option value="Inactive">Inactive</option>
             </select>
           </div>
         </div>
@@ -162,15 +212,22 @@ export const EmployeesView: React.FC = () => {
               <th>Department</th>
               <th>Designation</th>
               <th>Status</th>
+              {role === 'admin' && <th>Login Access</th>}
               <th>Location</th>
               <th>Join Date</th>
               <th style={{ textAlign: 'right' }}>Actions</th>
             </tr>
           </thead>
           <tbody>
-            {filteredEmployees.length === 0 ? (
+            {employeesLoading ? (
               <tr>
-                <td colSpan={8} style={{ textAlign: 'center', padding: '48px 24px', color: 'var(--text-muted)' }}>
+                <td colSpan={role === 'admin' ? 9 : 8} style={{ textAlign: 'center', padding: '48px 24px', color: 'var(--text-muted)' }}>
+                  Loading employees…
+                </td>
+              </tr>
+            ) : filteredEmployees.length === 0 ? (
+              <tr>
+                <td colSpan={role === 'admin' ? 9 : 8} style={{ textAlign: 'center', padding: '48px 24px', color: 'var(--text-muted)' }}>
                   No employees matched your current search filters.
                 </td>
               </tr>
@@ -213,6 +270,39 @@ export const EmployeesView: React.FC = () => {
                   <td>
                     {getStatusBadge(emp.status)}
                   </td>
+                  {role === 'admin' && (
+                    <td onClick={event => event.stopPropagation()}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                        <span className={`badge ${emp.accountStatus === 'Active' || emp.accountStatus === 'Admin account' ? 'badge-success' : emp.accountStatus === 'Deactivated' ? 'badge-neutral' : 'badge-warning'}`}>
+                          <span className="badge-dot" />{emp.accountStatus ?? 'Not set up'}
+                        </span>
+                        {emp.accountStatus !== 'Admin account' && (
+                          <button
+                            type="button"
+                            disabled={pendingAccountAction === emp.id || emp.status === 'Inactive'}
+                            onClick={() => void createAccessLink(emp.id, `${emp.firstName} ${emp.lastName}`)}
+                            className="btn btn-ghost btn-sm"
+                            title="Create a one-time password setup or reset link."
+                          >
+                            <KeyRound size={14} />
+                            {emp.accountStatus === 'Active' || emp.accountStatus === 'Deactivated' ? 'Reset link' : 'Setup link'}
+                          </button>
+                        )}
+                        {(emp.accountStatus === 'Active' || emp.accountStatus === 'Deactivated') && (
+                          <button
+                            type="button"
+                            disabled={pendingAccountAction === emp.id || (emp.accountStatus === 'Deactivated' && emp.status === 'Inactive')}
+                            onClick={() => void updateAccountAccess(emp.id, emp.accountStatus === 'Deactivated')}
+                            className="btn btn-ghost btn-sm"
+                            title={emp.accountStatus === 'Active' ? 'Deactivate and revoke this employee’s sessions.' : 'Reactivate login access.'}
+                          >
+                            {emp.accountStatus === 'Active' ? <UserX size={14} /> : <UserCheck size={14} />}
+                            {emp.accountStatus === 'Active' ? 'Deactivate' : 'Reactivate'}
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  )}
                   <td>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--text-secondary)', fontSize: '12.5px' }}>
                       <MapPin size={13} color="var(--text-muted)" />
@@ -243,10 +333,46 @@ export const EmployeesView: React.FC = () => {
       </div>
 
       {/* Add Employee Modal */}
-      <AddEmployeeModal 
-        isOpen={isAddModalOpen}
-        onClose={() => setIsAddModalOpen(false)}
-      />
+      {role === 'admin' && (
+        <AddEmployeeModal
+          isOpen={isAddModalOpen}
+          onClose={() => setIsAddModalOpen(false)}
+        />
+      )}
+      {accountActionError && (
+        <div role="alert" style={{ position: 'fixed', right: '24px', bottom: '24px', zIndex: 1300, maxWidth: '420px', padding: '12px 16px', borderRadius: '8px', color: '#CF202F', backgroundColor: '#FEECEE', boxShadow: 'var(--shadow-md)' }}>
+          {accountActionError}
+          <button type="button" aria-label="Dismiss" onClick={() => setAccountActionError(null)} style={{ marginLeft: '12px', border: 0, background: 'none', cursor: 'pointer' }}>×</button>
+        </div>
+      )}
+      {accessLink && (
+        <div className="modal-overlay" style={{ zIndex: 1200 }}>
+          <div className="modal-content" style={{ maxWidth: '560px' }}>
+            <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border-light)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <h3 style={{ fontSize: '18px', fontWeight: '700', color: 'var(--text-main)', margin: 0 }}>
+                  {accessLink.purpose === 'setup' ? 'Employee setup link' : 'Password reset link'}
+                </h3>
+                <p style={{ fontSize: '12.5px', color: 'var(--text-secondary)', margin: '4px 0 0' }}>{accessLink.employeeName} · expires {new Date(accessLink.expiresAt).toLocaleString()}</p>
+              </div>
+              <button type="button" aria-label="Close" onClick={() => setAccessLink(null)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>
+                <X size={20} />
+              </button>
+            </div>
+            <div style={{ padding: '24px' }}>
+              <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: 0 }}>
+                Share this one-time link with the employee through a trusted channel. It expires in 24 hours and can only be used once. The app does not send email.
+              </p>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <input aria-label="One-time access link" readOnly className="form-control" value={accessLink.url} onFocus={event => event.currentTarget.select()} />
+                <button type="button" className="btn btn-secondary" onClick={() => void copyAccessLink()}>
+                  <Copy size={15} /> Copy
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

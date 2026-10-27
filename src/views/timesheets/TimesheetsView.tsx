@@ -1,120 +1,165 @@
-import React, { useState } from 'react';
-import { 
-  Clock, 
-  Send, 
-  Check, 
-  X, 
-  ChevronLeft, 
-  ChevronRight, 
-  Plus, 
-  Sparkles,
-  Calendar,
-  AlertCircle
-} from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { Check, ChevronLeft, ChevronRight, Plus, Send, Sparkles, X } from 'lucide-react';
 import { useERP } from '../../context/ERPContext';
-import { Timesheet } from '../../types/erp';
+import type { Timesheet, TimesheetEntry } from '../../types/erp';
+
+const weekdays: Array<{ key: keyof TimesheetEntry['hours']; label: string }> = [
+  { key: 'mon', label: 'Mon' },
+  { key: 'tue', label: 'Tue' },
+  { key: 'wed', label: 'Wed' },
+  { key: 'thu', label: 'Thu' },
+  { key: 'fri', label: 'Fri' },
+  { key: 'sat', label: 'Sat' },
+  { key: 'sun', label: 'Sun' },
+];
+
+type DraftRow = {
+  key: string;
+  projectId: string;
+  taskDescription: string;
+  hours: TimesheetEntry['hours'];
+};
+
+function zeroHours(): TimesheetEntry['hours'] {
+  return { mon: 0, tue: 0, wed: 0, thu: 0, fri: 0, sat: 0, sun: 0 };
+}
+
+function mondayOf(date: Date): string {
+  const monday = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  monday.setUTCDate(monday.getUTCDate() - ((monday.getUTCDay() + 6) % 7));
+  return monday.toISOString().slice(0, 10);
+}
+
+function shiftDate(date: string, days: number): Date {
+  const shifted = new Date(`${date}T00:00:00.000Z`);
+  shifted.setUTCDate(shifted.getUTCDate() + days);
+  return shifted;
+}
+
+function formatDate(date: Date): string {
+  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' });
+}
 
 export const TimesheetsView: React.FC = () => {
-  const { 
-    timesheets, 
-    role, 
-    currentUser, 
-    updateTimesheetHours, 
-    submitTimesheet, 
-    reviewTimesheet, 
-    setFigmaOverlayAsset 
+  const {
+    timesheets,
+    timesheetsLoading,
+    timesheetsError,
+    projects,
+    employees,
+    role,
+    currentUser,
+    saveTimesheet,
+    reviewTimesheet,
+    setFigmaOverlayAsset,
   } = useERP();
+  const [viewMode, setViewMode] = useState<'weekly' | 'approval'>('weekly');
+  const [weekStart, setWeekStart] = useState(() => mondayOf(new Date()));
+  const [draftState, setDraftState] = useState<{ weekStart: string; rows: DraftRow[] } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
-  const [viewMode, setViewMode] = useState<'weekly' | 'approval' | 'empty'>('weekly');
+  const ownEmployee = employees.find(employee => employee.email === currentUser.email);
+  const myTimesheet = timesheets.find(sheet => sheet.employeeId === ownEmployee?.id && sheet.weekStart === weekStart);
+  const canEdit = !myTimesheet || myTimesheet.status === 'Draft' || myTimesheet.status === 'Rejected';
+  const pendingTimesheets = timesheets.filter(sheet => sheet.status === 'Submitted');
+  const initialRows = useMemo(() => myTimesheet
+    ? myTimesheet.entries.map(entry => ({
+      key: entry.id,
+      projectId: entry.projectId,
+      taskDescription: entry.taskDescription,
+      hours: { ...entry.hours },
+    }))
+    : projects[0]
+      ? [{ key: crypto.randomUUID(), projectId: projects[0].id, taskDescription: '', hours: zeroHours() }]
+      : [], [myTimesheet, projects]);
+  const rows = draftState?.weekStart === weekStart ? draftState.rows : initialRows;
+  const totalHours = rows.reduce((sum, row) => sum + Object.values(row.hours).reduce((rowSum, hours) => rowSum + hours, 0), 0);
+  const dayHeaders = useMemo(() => weekdays.map((day, index) => ({
+    ...day,
+    date: formatDate(shiftDate(weekStart, index)),
+  })), [weekStart]);
 
-  const myTimesheet = timesheets.find(t => t.employeeId === currentUser.id) || timesheets[0];
-  const pendingTimesheets = timesheets.filter(t => t.status === 'Submitted');
+  const updateRows = (update: (current: DraftRow[]) => DraftRow[]) => {
+    setDraftState({ weekStart, rows: update(rows) });
+  };
 
-  const days: Array<{ key: keyof Timesheet['entries'][0]['hours']; label: string; date: string }> = [
-    { key: 'mon', label: 'Mon', date: 'Oct 12' },
-    { key: 'tue', label: 'Tue', date: 'Oct 13' },
-    { key: 'wed', label: 'Wed', date: 'Oct 14' },
-    { key: 'thu', label: 'Thu', date: 'Oct 15' },
-    { key: 'fri', label: 'Fri', date: 'Oct 16' },
-    { key: 'sat', label: 'Sat', date: 'Oct 17' },
-    { key: 'sun', label: 'Sun', date: 'Oct 18' }
-  ];
+  const updateRow = (key: string, update: Partial<DraftRow>) => {
+    updateRows(current => current.map(row => row.key === key ? { ...row, ...update } : row));
+  };
+
+  const addRow = () => {
+    if (projects.length === 0) return;
+    updateRows(current => [...current, {
+      key: crypto.randomUUID(),
+      projectId: projects[0].id,
+      taskDescription: '',
+      hours: zeroHours(),
+    }]);
+  };
+
+  const handleSave = async (status: 'Draft' | 'Submitted') => {
+    setError(null);
+    setSubmitting(true);
+    try {
+      const entries = rows.map(({ projectId, taskDescription, hours }) => ({
+        projectId,
+        taskDescription: taskDescription.trim()
+          || projects.find(project => project.id === projectId)?.name
+          || 'Project work',
+        hours,
+      }));
+      const saved = await saveTimesheet(weekStart, status, entries);
+      setDraftState({
+        weekStart,
+        rows: saved.entries.map(entry => ({
+          key: entry.id,
+          projectId: entry.projectId,
+          taskDescription: entry.taskDescription,
+          hours: { ...entry.hours },
+        })),
+      });
+      setError(null);
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Unable to save timesheet.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleReview = async (sheet: Timesheet, status: 'Approved' | 'Rejected') => {
+    setError(null);
+    try {
+      await reviewTimesheet(sheet.id, status);
+    } catch (reviewError) {
+      setError(reviewError instanceof Error ? reviewError.message : 'Unable to review timesheet.');
+    }
+  };
 
   return (
     <div style={{ padding: '32px' }}>
-      {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <h2 style={{ fontSize: '20px', fontWeight: '800', color: 'var(--text-main)', margin: 0 }}>
-              {viewMode === 'approval' ? 'Timesheet Approvals Queue' : 'Weekly Timesheet Logger'}
-            </h2>
-            <span className={`badge ${myTimesheet.status === 'Approved' ? 'badge-success' : 'badge-warning'}`}>
-              <span className="badge-dot" />
-              {myTimesheet.status}
-            </span>
-          </div>
+          <h2 style={{ fontSize: '20px', fontWeight: '800', color: 'var(--text-main)', margin: 0 }}>
+            {viewMode === 'approval' ? 'Timesheet Approvals Queue' : 'Weekly Timesheet'}
+          </h2>
           <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-            Log billable hours against active initiatives and submit for manager approval before payroll cutoff.
+            Record hours against projects assigned to you. Administrators review submitted timesheets.
           </p>
         </div>
-
         <div style={{ display: 'flex', gap: '12px' }}>
-          {/* View Mode Pills (Matching Figma variations) */}
-          <div style={{ display: 'flex', gap: '4px', background: '#F1F3F5', padding: '3px', borderRadius: '6px' }}>
+          {role === 'admin' && (
             <button
-              onClick={() => setViewMode('weekly')}
-              style={{
-                padding: '4px 10px',
-                border: 'none',
-                borderRadius: '4px',
-                fontSize: '12px',
-                fontWeight: '600',
-                cursor: 'pointer',
-                backgroundColor: viewMode === 'weekly' ? '#0052FF' : 'transparent',
-                color: viewMode === 'weekly' ? '#FFFFFF' : 'var(--text-secondary)'
-              }}
+              onClick={() => setViewMode(viewMode === 'approval' ? 'weekly' : 'approval')}
+              className="btn btn-secondary btn-sm"
             >
-              Weekly View
+              {viewMode === 'approval' ? 'Weekly View' : `Admin Approval (${pendingTimesheets.length})`}
             </button>
-            <button
-              onClick={() => setViewMode('approval')}
-              style={{
-                padding: '4px 10px',
-                border: 'none',
-                borderRadius: '4px',
-                fontSize: '12px',
-                fontWeight: '600',
-                cursor: 'pointer',
-                backgroundColor: viewMode === 'approval' ? '#0052FF' : 'transparent',
-                color: viewMode === 'approval' ? '#FFFFFF' : 'var(--text-secondary)'
-              }}
-            >
-              Admin Approval ({pendingTimesheets.length})
-            </button>
-            <button
-              onClick={() => setViewMode('empty')}
-              style={{
-                padding: '4px 10px',
-                border: 'none',
-                borderRadius: '4px',
-                fontSize: '12px',
-                fontWeight: '600',
-                cursor: 'pointer',
-                backgroundColor: viewMode === 'empty' ? '#0052FF' : 'transparent',
-                color: viewMode === 'empty' ? '#FFFFFF' : 'var(--text-secondary)'
-              }}
-            >
-              Empty State Spec
-            </button>
-          </div>
-
+          )}
           <button
             onClick={() => setFigmaOverlayAsset(
               viewMode === 'approval'
                 ? '/design-assets/Timesheets/Timesheets — Admin Approval.svg'
-                : viewMode === 'empty'
-                ? '/design-assets/Timesheets/Timesheets — Empty State.svg'
                 : '/design-assets/Timesheets/Timesheets — Weekly View.svg'
             )}
             className="btn btn-secondary btn-sm"
@@ -125,199 +170,175 @@ export const TimesheetsView: React.FC = () => {
         </div>
       </div>
 
-      {/* Empty State View matching Timesheets — Empty State.svg */}
-      {viewMode === 'empty' ? (
-        <div className="card" style={{ padding: '80px 24px', textAlign: 'center', maxWidth: '600px', margin: '40px auto' }}>
-          <div style={{ width: '64px', height: '64px', borderRadius: '16px', backgroundColor: '#F1F3F5', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px auto', color: '#8A8F98' }}>
-            <Clock size={32} />
-          </div>
-          <h3 style={{ fontSize: '20px', fontWeight: '700', color: '#0A0B0D', margin: 0 }}>No Hours Logged This Week</h3>
-          <p style={{ fontSize: '14px', color: '#5B616E', marginTop: '8px', lineHeight: '1.5' }}>
-            You have not recorded time entries for the current sprint period. Start by selecting your assigned project and entering daily hours.
-          </p>
-          <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', marginTop: '24px' }}>
-            <button onClick={() => setViewMode('weekly')} className="btn btn-primary">
-              <Plus size={16} />
-              <span>Record Hours</span>
-            </button>
-          </div>
+      {(error || timesheetsError) && (
+        <div role="alert" style={{ padding: '12px 16px', marginBottom: '16px', borderRadius: '8px', color: '#CF202F', backgroundColor: '#FEECEE' }}>
+          {error ?? timesheetsError}
         </div>
-      ) : viewMode === 'approval' ? (
-        /* Admin Approvals Queue */
-        <div>
-          <div className="card" style={{ padding: '24px', marginBottom: '24px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <h3 style={{ fontSize: '16px', fontWeight: '700', color: 'var(--text-main)', margin: 0 }}>
-                Submitted Timesheets Pending Verification
-              </h3>
-              <span className="badge badge-warning">{pendingTimesheets.length} Pending</span>
-            </div>
+      )}
 
-            {pendingTimesheets.length === 0 ? (
-              <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
-                ✓ All submitted timesheets for this cycle have been reviewed and approved!
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                {pendingTimesheets.map(ts => (
-                  <div key={ts.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px', borderRadius: '10px', backgroundColor: '#F8F9FA', border: '1px solid var(--border-light)' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                      <img src={ts.employeeAvatar} alt={ts.employeeName} style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover' }} />
-                      <div>
-                        <div style={{ fontWeight: '700', fontSize: '14px' }}>{ts.employeeName}</div>
-                        <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                          {ts.department} • Period: {ts.weekStart} to {ts.weekEnd} • Submitted on {ts.submittedOn}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-                      <div style={{ textAlign: 'right' }}>
-                        <div style={{ fontSize: '16px', fontWeight: '800', color: '#0052FF' }}>{ts.totalHours} hrs</div>
-                        <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{ts.entries.length} project task(s)</div>
-                      </div>
-
-                      <div style={{ display: 'flex', gap: '8px' }}>
-                        <button 
-                          onClick={() => reviewTimesheet(ts.id, 'Approved')}
-                          className="btn btn-sm"
-                          style={{ backgroundColor: '#E3F6EC', color: '#05B169', border: '1px solid #A3E6C5' }}
-                        >
-                          <Check size={14} />
-                          <span>Approve</span>
-                        </button>
-                        <button 
-                          onClick={() => reviewTimesheet(ts.id, 'Rejected')}
-                          className="btn btn-sm"
-                          style={{ backgroundColor: '#FEECEE', color: '#CF202F', border: '1px solid #F7BAC0' }}
-                        >
-                          <X size={14} />
-                          <span>Reject</span>
-                        </button>
+      {viewMode === 'approval' && role === 'admin' ? (
+        <section className="card" style={{ padding: '24px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+            <h3 style={{ fontSize: '16px', fontWeight: '700', color: 'var(--text-main)', margin: 0 }}>
+              Submitted Timesheets
+            </h3>
+            <span className="badge badge-warning">{pendingTimesheets.length} Pending</span>
+          </div>
+          {timesheetsLoading ? (
+            <div style={{ padding: '32px', textAlign: 'center', color: 'var(--text-muted)' }}>Loading timesheets…</div>
+          ) : pendingTimesheets.length === 0 ? (
+            <div style={{ padding: '32px', textAlign: 'center', color: 'var(--text-muted)' }}>No submitted timesheets are awaiting review.</div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              {pendingTimesheets.map(sheet => (
+                <div key={sheet.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', padding: '16px', borderRadius: '10px', backgroundColor: '#F8F9FA', border: '1px solid var(--border-light)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <img src={sheet.employeeAvatar} alt={sheet.employeeName} style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover' }} />
+                    <div>
+                      <div style={{ fontWeight: '700', fontSize: '14px' }}>{sheet.employeeName}</div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                        {sheet.department} · {sheet.weekStart} to {sheet.weekEnd} · {sheet.submittedOn}
                       </div>
                     </div>
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                    <strong>{sheet.totalHours.toFixed(1)} hrs</strong>
+                    <button onClick={() => void handleReview(sheet, 'Approved')} className="btn btn-sm" style={{ backgroundColor: '#E3F6EC', color: '#05B169', border: '1px solid #A3E6C5' }}>
+                      <Check size={14} /> Approve
+                    </button>
+                    <button onClick={() => void handleReview(sheet, 'Rejected')} className="btn btn-sm" style={{ backgroundColor: '#FEECEE', color: '#CF202F', border: '1px solid #F7BAC0' }}>
+                      <X size={14} /> Reject
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
       ) : (
-        /* Weekly Grid Logger View matching Timesheets — Weekly View.svg */
-        <div>
-          {/* Week Selector Bar */}
-          <div className="card" style={{ padding: '16px 20px', marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <>
+          <div className="card" style={{ padding: '16px 20px', marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <button className="btn btn-sm btn-secondary">
+              <button className="btn btn-sm btn-secondary" aria-label="Previous week" onClick={() => setWeekStart(shiftDate(weekStart, -7).toISOString().slice(0, 10))}>
                 <ChevronLeft size={14} />
               </button>
-              <div style={{ fontWeight: '700', fontSize: '14.5px', color: 'var(--text-main)' }}>
-                Week 42: October 12, 2026 — October 18, 2026
-              </div>
-              <button className="btn btn-sm btn-secondary">
+              <strong>{formatDate(new Date(`${weekStart}T00:00:00.000Z`))} — {formatDate(shiftDate(weekStart, 6))}, {weekStart.slice(0, 4)}</strong>
+              <button className="btn btn-sm btn-secondary" aria-label="Next week" onClick={() => setWeekStart(shiftDate(weekStart, 7).toISOString().slice(0, 10))}>
                 <ChevronRight size={14} />
               </button>
+              {myTimesheet && <span className={`badge ${myTimesheet.status === 'Approved' ? 'badge-success' : 'badge-warning'}`}>{myTimesheet.status}</span>}
             </div>
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-              <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-                Total Recorded: <strong style={{ color: '#0052FF', fontSize: '15px' }}>{myTimesheet.totalHours} / 40.0 hrs</strong>
-              </div>
-              {myTimesheet.status !== 'Submitted' && myTimesheet.status !== 'Approved' && (
-                <button 
-                  onClick={() => submitTimesheet(myTimesheet.id)}
-                  className="btn btn-primary btn-sm"
-                >
-                  <Send size={14} />
-                  <span>Submit Timesheet</span>
-                </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <span>Total: <strong style={{ color: '#0052FF' }}>{totalHours.toFixed(1)} hrs</strong></span>
+              {canEdit && (
+                <>
+                  <button disabled={submitting || projects.length === 0} className="btn btn-secondary btn-sm" onClick={() => void handleSave('Draft')}>Save Draft</button>
+                  <button disabled={submitting || projects.length === 0} className="btn btn-primary btn-sm" onClick={() => void handleSave('Submitted')}>
+                    <Send size={14} /> Submit
+                  </button>
+                </>
               )}
             </div>
           </div>
 
-          {/* Interactive Hours Grid Table */}
-          <div className="table-container">
-            <table className="erp-table">
-              <thead>
-                <tr>
-                  <th style={{ width: '320px' }}>Project & Task</th>
-                  {days.map(d => (
-                    <th key={d.key} style={{ textAlign: 'center', minWidth: '70px' }}>
-                      <div>{d.label}</div>
-                      <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{d.date}</div>
-                    </th>
-                  ))}
-                  <th style={{ textAlign: 'center', width: '90px' }}>Total</th>
-                </tr>
-              </thead>
-              <tbody>
-                {myTimesheet.entries.map(entry => {
-                  const rowSum = Object.values(entry.hours).reduce((a, b) => a + b, 0);
-                  return (
-                    <tr key={entry.id}>
-                      <td>
-                        <div style={{ fontWeight: '700', color: 'var(--text-main)', fontSize: '13.5px' }}>
-                          {entry.projectName}
-                        </div>
-                        <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                          {entry.taskDescription}
-                        </div>
-                      </td>
-
-                      {days.map(d => (
-                        <td key={d.key} style={{ textAlign: 'center' }}>
-                          <input 
-                            type="number"
-                            min="0"
-                            max="24"
-                            step="0.5"
-                            value={entry.hours[d.key] || ''}
-                            onChange={e => updateTimesheetHours(myTimesheet.id, entry.id, d.key, Number(e.target.value))}
-                            style={{
-                              width: '54px',
-                              height: '36px',
-                              textAlign: 'center',
-                              borderRadius: '6px',
-                              border: '1px solid var(--border-default)',
-                              fontSize: '13.5px',
-                              fontWeight: '600',
-                              outline: 'none',
-                              color: entry.hours[d.key] > 0 ? '#0052FF' : 'var(--text-muted)'
-                            }}
+          {!ownEmployee && !timesheetsLoading && (
+            <div className="card" style={{ padding: '32px', textAlign: 'center' }}>Your account does not have a linked employee profile.</div>
+          )}
+          {timesheetsLoading ? (
+            <div className="card" style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>Loading timesheets…</div>
+          ) : projects.length === 0 ? (
+            <div className="card" style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
+              No active projects are assigned to you. Ask an administrator to add you to a project team.
+            </div>
+          ) : (
+            <div className="table-container">
+              <table className="erp-table">
+                <thead>
+                  <tr>
+                    <th style={{ width: '280px' }}>Project & Task</th>
+                    {dayHeaders.map(day => (
+                      <th key={day.key} style={{ textAlign: 'center', minWidth: '70px' }}>
+                        <div>{day.label}</div>
+                        <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{day.date}</div>
+                      </th>
+                    ))}
+                    <th style={{ textAlign: 'center', width: '80px' }}>Total</th>
+                    {canEdit && <th />}
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map(row => {
+                    const rowHours = Object.values(row.hours).reduce((sum, hours) => sum + hours, 0);
+                    return (
+                      <tr key={row.key}>
+                        <td>
+                          <select
+                            className="form-control"
+                            disabled={!canEdit}
+                            value={row.projectId}
+                            onChange={event => updateRow(row.key, { projectId: event.target.value })}
+                          >
+                            {projects.map(project => <option key={project.id} value={project.id}>{project.name}</option>)}
+                          </select>
+                          <input
+                            className="form-control"
+                            style={{ marginTop: '6px' }}
+                            placeholder="Task description (optional)"
+                            maxLength={500}
+                            disabled={!canEdit}
+                            value={row.taskDescription}
+                            onChange={event => updateRow(row.key, { taskDescription: event.target.value })}
                           />
                         </td>
-                      ))}
-
-                      <td style={{ textAlign: 'center' }}>
-                        <strong style={{ color: 'var(--text-main)', fontSize: '14px' }}>
-                          {rowSum.toFixed(1)}h
-                        </strong>
-                      </td>
-                    </tr>
-                  );
-                })}
-
-                {/* Summary Row */}
-                <tr style={{ backgroundColor: '#F8F9FA', fontWeight: '700' }}>
-                  <td>
-                    <span>Daily Aggregate</span>
-                  </td>
-                  {days.map(d => {
-                    const colSum = myTimesheet.entries.reduce((acc, entry) => acc + (entry.hours[d.key] || 0), 0);
-                    return (
-                      <td key={d.key} style={{ textAlign: 'center', color: colSum >= 8 ? '#05B169' : '#0052FF' }}>
-                        {colSum.toFixed(1)}h
-                      </td>
+                        {dayHeaders.map(day => (
+                          <td key={day.key} style={{ textAlign: 'center' }}>
+                            <input
+                              type="number"
+                              min="0"
+                              max="24"
+                              step="0.5"
+                              disabled={!canEdit}
+                              value={row.hours[day.key] || ''}
+                              onChange={event => updateRow(row.key, {
+                                hours: { ...row.hours, [day.key]: Number(event.target.value) || 0 },
+                              })}
+                              style={{ width: '54px', height: '36px', textAlign: 'center', borderRadius: '6px', border: '1px solid var(--border-default)', fontSize: '13.5px', fontWeight: '600' }}
+                            />
+                          </td>
+                        ))}
+                        <td style={{ textAlign: 'center' }}><strong>{rowHours.toFixed(1)}h</strong></td>
+                        {canEdit && (
+                          <td>
+                            <button className="btn btn-secondary btn-sm" aria-label="Remove entry" onClick={() => updateRows(current => current.filter(item => item.key !== row.key))}>
+                              <X size={14} />
+                            </button>
+                          </td>
+                        )}
+                      </tr>
                     );
                   })}
-                  <td style={{ textAlign: 'center', fontSize: '15px', color: '#0052FF' }}>
-                    {myTimesheet.totalHours.toFixed(1)}h
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
+                  <tr style={{ backgroundColor: '#F8F9FA', fontWeight: '700' }}>
+                    <td>
+                      {canEdit && <button className="btn btn-secondary btn-sm" onClick={addRow}><Plus size={14} /> Add project task</button>}
+                      {!canEdit && 'Daily Total'}
+                    </td>
+                    {dayHeaders.map(day => {
+                      const total = rows.reduce((sum, row) => sum + row.hours[day.key], 0);
+                      return <td key={day.key} style={{ textAlign: 'center', color: total > 24 ? '#CF202F' : '#0052FF' }}>{total.toFixed(1)}h</td>;
+                    })}
+                    <td style={{ textAlign: 'center', color: '#0052FF' }}>{totalHours.toFixed(1)}h</td>
+                    {canEdit && <td />}
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          )}
+          {myTimesheet?.reviewNote && (
+            <div style={{ marginTop: '16px', padding: '12px 16px', borderRadius: '8px', background: '#FFF7E6' }}>
+              Reviewer note: {myTimesheet.reviewNote}
+            </div>
+          )}
+        </>
       )}
     </div>
   );

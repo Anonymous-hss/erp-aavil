@@ -1,13 +1,8 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { 
-  Calendar, 
   Clock, 
-  CreditCard, 
-  Briefcase, 
-  Award, 
   ArrowRight, 
   Sparkles, 
-  CheckCircle,
   Plus
 } from 'lucide-react';
 import { useERP } from '../../context/ERPContext';
@@ -16,15 +11,46 @@ export const EmployeeDashboardView: React.FC = () => {
   const { 
     currentUser, 
     setCurrentView, 
+    employees,
+    employeesLoading,
     projects, 
+    projectsLoading,
+    projectsError,
     timesheets, 
+    timesheetsLoading,
+    timesheetsError,
+    payroll,
+    payrollLoading,
+    payrollError,
     setFigmaOverlayAsset 
   } = useERP();
 
   const [dashboardState, setDashboardState] = useState<'default' | 'enriched'>('default');
+  const [now, setNow] = useState<Date | null>(null);
 
-  const myProjects = projects.filter(p => p.team.some(m => m.id === currentUser.id));
-  const myCurrentTimesheet = timesheets.find(t => t.employeeId === currentUser.id) || timesheets[0];
+  useEffect(() => {
+    const timer = window.setTimeout(() => setNow(new Date()), 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  const myEmployee = employees.find(employee => employee.email.toLowerCase() === currentUser.email.toLowerCase());
+  const myProjects = projects.filter(project => (
+    project.team.some(member => member.id === myEmployee?.id)
+    && (project.status === 'Active' || project.status === 'In Progress')
+  ));
+  const myCurrentTimesheet = timesheets
+    .filter(timesheet => timesheet.employeeId === myEmployee?.id)
+    .sort((a, b) => b.weekStart.localeCompare(a.weekStart))[0];
+  const latestPayslip = payroll
+    .filter(record => record.employeeId === myEmployee?.id)
+    .sort((a, b) => {
+      const periodA = a.year * 12 + new Date(`${a.month} 1, ${a.year}`).getMonth();
+      const periodB = b.year * 12 + new Date(`${b.month} 1, ${b.year}`).getMonth();
+      return periodB - periodA;
+    })[0];
+  const greeting = !now || now.getHours() < 12 ? 'Good morning' : now.getHours() < 18 ? 'Good afternoon' : 'Good evening';
+  const todayLabel = now?.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }) ?? '';
+  const leaveBalance = myEmployee?.leaveBalance;
 
   return (
     <div style={{ padding: '32px' }}>
@@ -104,13 +130,23 @@ export const EmployeeDashboardView: React.FC = () => {
       }}>
         <div style={{ zIndex: 2 }}>
           <div style={{ fontSize: '13px', color: '#8A8F98', fontWeight: '500' }}>
-            Wednesday, October 21, 2026 • Work Day 19 of 22
+            {todayLabel}
           </div>
           <h2 style={{ fontSize: '28px', fontWeight: '800', marginTop: '6px', letterSpacing: '-0.02em' }}>
-            Good afternoon, {currentUser.name.split(' ')[0]} 👋
+            {greeting}, {currentUser.name.split(' ')[0]} 👋
           </h2>
           <p style={{ fontSize: '14px', color: '#B5BAC2', marginTop: '6px', maxWidth: '520px' }}>
-            You're currently assigned to <strong>{myProjects.length} active initiatives</strong>. Next payroll disbursement is scheduled in 7 days.
+            {projectsLoading
+              ? 'Loading your assigned projects…'
+              : <>You are assigned to <strong>{myProjects.length} active {myProjects.length === 1 ? 'project' : 'projects'}</strong>.</>}
+            {' '}
+            {payrollLoading
+              ? 'Loading your payslip records…'
+              : payrollError
+                ? 'Your payslip data is currently unavailable.'
+                : latestPayslip
+              ? `Your latest recorded payslip is ${latestPayslip.month} ${latestPayslip.year} (${latestPayslip.status}).`
+              : 'No payslip has been recorded for you yet.'}
           </p>
         </div>
 
@@ -165,12 +201,13 @@ export const EmployeeDashboardView: React.FC = () => {
               color: '#0052FF',
               flexShrink: 0
             }}>
-              14
+              {employeesLoading ? '…' : leaveBalance?.annual ?? '—'}
             </div>
             <div>
               <div style={{ fontWeight: '700', fontSize: '15px', color: 'var(--text-main)' }}>Annual Leave</div>
-              <div style={{ fontSize: '12.5px', color: 'var(--text-secondary)', marginTop: '2px' }}>14 of 20 days remaining</div>
-              <div style={{ fontSize: '11px', color: '#05B169', fontWeight: '600', marginTop: '4px' }}>Accruing +1.6 days/mo</div>
+              <div style={{ fontSize: '12.5px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                {employeesLoading ? 'Loading balance…' : leaveBalance ? `${leaveBalance.annual} of ${leaveBalance.annualTotal} days remaining` : 'Balance unavailable'}
+              </div>
             </div>
           </div>
 
@@ -190,12 +227,13 @@ export const EmployeeDashboardView: React.FC = () => {
               color: '#05B169',
               flexShrink: 0
             }}>
-              8
+              {employeesLoading ? '…' : leaveBalance?.sick ?? '—'}
             </div>
             <div>
               <div style={{ fontWeight: '700', fontSize: '15px', color: 'var(--text-main)' }}>Sick Leave</div>
-              <div style={{ fontSize: '12.5px', color: 'var(--text-secondary)', marginTop: '2px' }}>8 of 10 days remaining</div>
-              <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>Medical certificate required &gt; 3 days</div>
+              <div style={{ fontSize: '12.5px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                {employeesLoading ? 'Loading balance…' : leaveBalance ? `${leaveBalance.sick} of ${leaveBalance.sickTotal} days remaining` : 'Balance unavailable'}
+              </div>
             </div>
           </div>
 
@@ -215,12 +253,13 @@ export const EmployeeDashboardView: React.FC = () => {
               color: '#B45309',
               flexShrink: 0
             }}>
-              4
+              {employeesLoading ? '…' : leaveBalance?.casual ?? '—'}
             </div>
             <div>
               <div style={{ fontWeight: '700', fontSize: '15px', color: 'var(--text-main)' }}>Casual / Personal</div>
-              <div style={{ fontSize: '12.5px', color: 'var(--text-secondary)', marginTop: '2px' }}>4 of 6 days remaining</div>
-              <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>Non-cumulative annual reset</div>
+              <div style={{ fontSize: '12.5px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                {employeesLoading ? 'Loading balance…' : leaveBalance ? `${leaveBalance.casual} of ${leaveBalance.casualTotal} days remaining` : 'Balance unavailable'}
+              </div>
             </div>
           </div>
         </div>
@@ -234,42 +273,52 @@ export const EmployeeDashboardView: React.FC = () => {
             <h3 style={{ fontSize: '16px', fontWeight: '700', color: 'var(--text-main)', margin: 0 }}>
               Current Timesheet
             </h3>
-            <span className="badge badge-success">
+            {myCurrentTimesheet && <span className={`badge ${myCurrentTimesheet.status === 'Approved' ? 'badge-success' : 'badge-warning'}`}>
               <span className="badge-dot" />
               {myCurrentTimesheet.status}
-            </span>
+            </span>}
           </div>
 
-          <div style={{ backgroundColor: '#F8F9FA', padding: '16px', borderRadius: '10px', marginBottom: '16px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: 'var(--text-secondary)' }}>
-              <span>Period:</span>
-              <strong style={{ color: 'var(--text-main)' }}>{myCurrentTimesheet.weekStart} — {myCurrentTimesheet.weekEnd}</strong>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: 'var(--text-secondary)', marginTop: '8px' }}>
-              <span>Total Hours:</span>
-              <strong style={{ color: '#0052FF', fontSize: '16px' }}>{myCurrentTimesheet.totalHours} hrs</strong>
-            </div>
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
-            {myCurrentTimesheet.entries.map(e => (
-              <div key={e.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12.5px', borderBottom: '1px solid var(--border-light)', paddingBottom: '6px' }}>
-                <span style={{ color: 'var(--text-main)', fontWeight: '500' }}>{e.projectName}</span>
-                <span style={{ color: 'var(--text-secondary)', fontWeight: '600' }}>
-                  {Object.values(e.hours).reduce((a, b) => a + b, 0)} hrs
-                </span>
+          {timesheetsLoading ? (
+            <div style={{ padding: '32px 0', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px' }}>Loading timesheets…</div>
+          ) : timesheetsError ? (
+            <div role="alert" style={{ padding: '32px 0', textAlign: 'center', color: '#CF202F', fontSize: '13px' }}>Unable to load timesheets: {timesheetsError}</div>
+          ) : !myCurrentTimesheet ? (
+            <div style={{ padding: '32px 0', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px' }}>No timesheet submitted yet.</div>
+          ) : (
+            <>
+              <div style={{ backgroundColor: '#F8F9FA', padding: '16px', borderRadius: '10px', marginBottom: '16px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: 'var(--text-secondary)' }}>
+                  <span>Period:</span>
+                  <strong style={{ color: 'var(--text-main)' }}>{myCurrentTimesheet.weekStart} — {myCurrentTimesheet.weekEnd}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: 'var(--text-secondary)', marginTop: '8px' }}>
+                  <span>Total Hours:</span>
+                  <strong style={{ color: '#0052FF', fontSize: '16px' }}>{myCurrentTimesheet.totalHours} hrs</strong>
+                </div>
               </div>
-            ))}
-          </div>
 
-          <button
-            onClick={() => setCurrentView('timesheets')}
-            className="btn btn-outline-primary"
-            style={{ width: '100%', fontSize: '13px' }}
-          >
-            <span>Edit Weekly Hours</span>
-            <ArrowRight size={14} />
-          </button>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
+                {myCurrentTimesheet.entries.map(entry => (
+                  <div key={entry.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12.5px', borderBottom: '1px solid var(--border-light)', paddingBottom: '6px' }}>
+                    <span style={{ color: 'var(--text-main)', fontWeight: '500' }}>{entry.projectName}</span>
+                    <span style={{ color: 'var(--text-secondary)', fontWeight: '600' }}>
+                      {Object.values(entry.hours).reduce((a, b) => a + b, 0)} hrs
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              <button
+                onClick={() => setCurrentView('timesheets')}
+                className="btn btn-outline-primary"
+                style={{ width: '100%', fontSize: '13px' }}
+              >
+                <span>Edit Weekly Hours</span>
+                <ArrowRight size={14} />
+              </button>
+            </>
+          )}
         </div>
 
         {/* Assigned Projects */}
@@ -287,7 +336,13 @@ export const EmployeeDashboardView: React.FC = () => {
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-            {myProjects.map(proj => (
+            {projectsLoading ? (
+              <div style={{ padding: '32px 0', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px' }}>Loading assigned projects…</div>
+            ) : projectsError ? (
+              <div role="alert" style={{ padding: '32px 0', textAlign: 'center', color: '#CF202F', fontSize: '13px' }}>Unable to load projects: {projectsError}</div>
+            ) : myProjects.length === 0 ? (
+              <div style={{ padding: '32px 0', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px' }}>You have no active project assignments.</div>
+            ) : myProjects.map(proj => (
               <div key={proj.id} style={{ padding: '16px', borderRadius: '10px', backgroundColor: '#F8F9FA', border: '1px solid var(--border-light)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                   <div>

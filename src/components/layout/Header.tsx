@@ -4,7 +4,6 @@ import {
   Bell, 
   CheckCircle2, 
   Sparkles,
-  SlidersHorizontal,
   ChevronDown,
   X
 } from 'lucide-react';
@@ -15,8 +14,8 @@ export const Header: React.FC = () => {
     currentView, 
     currentUser, 
     role, 
-    setRole, 
     notifications, 
+    notificationError,
     markNotificationsRead, 
     setFigmaOverlayAsset 
   } = useERP();
@@ -24,7 +23,7 @@ export const Header: React.FC = () => {
   const [showNotifications, setShowNotifications] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
-  const unreadCount = notifications.filter(n => !n.read).length;
+  const unreadCount = notifications.filter(notification => !notification.readAt).length;
 
   const viewTitles: Record<string, { title: string; subtitle: string; spec: string }> = {
     'dashboard': {
@@ -159,34 +158,12 @@ export const Header: React.FC = () => {
           <span>Figma Spec</span>
         </button>
 
-        {/* Role Quick Toggle */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderLeft: '1px solid var(--border-light)', paddingLeft: '16px' }}>
-          <span style={{ fontSize: '11px', fontWeight: '600', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Role:</span>
-          <button
-            onClick={() => setRole(role === 'admin' ? 'employee' : 'admin')}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '6px 10px',
-              backgroundColor: role === 'admin' ? '#0A0B0D' : 'var(--bg-subtle)',
-              color: role === 'admin' ? '#FFFFFF' : 'var(--text-main)',
-              border: 'none',
-              borderRadius: '6px',
-              fontSize: '12px',
-              fontWeight: '600',
-              cursor: 'pointer'
-            }}
-          >
-            <span>{role === 'admin' ? '👑 Admin' : '👤 Employee'}</span>
-            <SlidersHorizontal size={12} />
-          </button>
-        </div>
-
         {/* Notifications Bell */}
         <div style={{ position: 'relative' }}>
           <button
             onClick={() => setShowNotifications(!showNotifications)}
+            aria-label={`Notifications${unreadCount > 0 ? `, ${unreadCount} unread` : ''}`}
+            aria-expanded={showNotifications}
             style={{
               position: 'relative',
               width: '38px',
@@ -247,32 +224,41 @@ export const Header: React.FC = () => {
                 <span style={{ fontWeight: '600', fontSize: '13px' }}>Notifications</span>
                 {unreadCount > 0 && (
                   <button 
-                    onClick={markNotificationsRead}
+                    onClick={() => void markNotificationsRead()}
                     style={{ fontSize: '11px', color: 'var(--primary)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: '500' }}
                   >
                     Mark all read
                   </button>
                 )}
               </div>
+              {notificationError && (
+                <div role="alert" style={{ padding: '10px 16px', color: '#CF202F', backgroundColor: '#FEECEE', fontSize: '12px' }}>
+                  {notificationError}
+                </div>
+              )}
               <div style={{ maxHeight: '280px', overflowY: 'auto' }}>
-                {notifications.map(n => (
+                {notifications.length === 0 ? (
+                  <div style={{ padding: '24px 16px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '12px' }}>
+                    No notifications yet.
+                  </div>
+                ) : notifications.map(n => (
                   <div 
                     key={n.id} 
                     style={{
                       padding: '12px 16px',
                       borderBottom: '1px solid var(--border-light)',
-                      backgroundColor: n.read ? '#FFFFFF' : '#FAFCFF',
+                      backgroundColor: n.readAt ? '#FFFFFF' : '#FAFCFF',
                       display: 'flex',
                       gap: '10px'
                     }}
                   >
                     <CheckCircle2 size={16} color="var(--primary)" style={{ flexShrink: 0, marginTop: '2px' }} />
                     <div>
-                      <div style={{ fontSize: '12.5px', color: 'var(--text-main)', fontWeight: n.read ? '400' : '600' }}>
+                      <div style={{ fontSize: '12.5px', color: 'var(--text-main)', fontWeight: n.readAt ? '400' : '600' }}>
                         {n.title}
                       </div>
                       <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                        {n.time}
+                        {new Date(n.createdAt).toLocaleString()}
                       </div>
                     </div>
                   </div>

@@ -27,6 +27,7 @@ export interface Employee {
   location: string;
   manager: string;
   skills: string[];
+  accountStatus?: 'Not set up' | 'Invitation pending' | 'Active' | 'Deactivated' | 'Admin account';
   leaveBalance: {
     annual: number;
     annualTotal: number;
@@ -88,6 +89,7 @@ export interface Timesheet {
   status: TimesheetStatus;
   submittedOn?: string;
   reviewedBy?: string;
+  reviewNote?: string;
 }
 
 export interface PayrollRecord {
