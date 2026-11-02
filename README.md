@@ -1,6 +1,6 @@
 # AAVIL ERP
 
-A React + TypeScript frontend for employee, leave, project, timesheet, payroll, and appraisal workflows. The frontend lives at the repository root; the separate Fastify API and Supabase PostgreSQL backend live in [`backend/`](./backend/). Authentication, employee, leave, project, timesheet, payroll, and appraisal records are stored in Supabase.
+A React + TypeScript frontend for employee, attendance, leave, project, timesheet, payroll, and appraisal workflows. The frontend lives at the repository root; the separate Fastify API and Supabase PostgreSQL backend live in [`backend/`](./backend/). Authentication, employee, attendance, leave, project, timesheet, payroll, and appraisal records are stored in Supabase.
 
 ## Requirements
 
@@ -46,11 +46,19 @@ If `corepack enable` fails due to Windows permissions, do not enable global shim
 - `GET /api/auth/me` — returns the signed-in user
 - `PATCH /api/auth/profile/avatar` — updates the signed-in user's profile photo with a PNG, JPEG, or WebP image up to 5 MB
 - `POST /api/auth/logout` — revokes the session
+- `GET /api/attendance?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD&employeeId=<uuid>` — employees see their own attendance; administrators can filter all employee records by date and employee
+- `POST /api/attendance/clock-in` — start an attendance session for the signed-in user's linked employee profile
+- `POST /api/attendance/clock-out` — end the signed-in user's open attendance session
+- `PATCH /api/attendance/:id` — administrators correct clock times with a required reason; previous and new values are kept in the audit history
 - `GET /api/employees` — administrators see all employee records; employees see only their linked profile
 - `GET /api/employees/:id` — administrators can view any profile; employees can view only their own
 - `POST /api/employees` — administrators create employee records
 - `PATCH /api/employees/:id` — administrators update employee records
 - `GET /api/leave-requests` — administrators see all requests; employees see their own requests and balance
+- `GET /api/leave-requests/holidays` — authenticated users view company holidays
+- `POST /api/leave-requests/holidays` — administrators publish a company-wide holiday or date range
+- `PATCH /api/leave-requests/holidays/:id` — administrators update a holiday; overlapping holidays are rejected
+- `DELETE /api/leave-requests/holidays/:id` — administrators remove a holiday
 - `GET /api/leave-requests/policy` — returns the company leave allowances
 - `GET /api/leave-requests/policy/history` — administrators view recent allowance changes
 - `PUT /api/leave-requests/policy` — administrators update company leave allowances
@@ -58,6 +66,7 @@ If `corepack enable` fails due to Windows permissions, do not enable global shim
 - `PATCH /api/leave-requests/:id/review` — administrators approve or reject a pending request
 - `GET /api/projects` — administrators see all projects; employees see their assigned projects
 - `POST /api/projects` — administrators create projects and assign project team members
+- `PUT /api/projects/:id/members` — administrators add or remove project team members; members with unfinished tasks must be reassigned or have those tasks completed first
 - `POST /api/projects/:id/tasks` — administrators create tasks and assign them to project team members
 - `PATCH /api/projects/:projectId/tasks/:taskId` — administrators update or reassign a task; employees update only tasks assigned to them
 - `GET /api/timesheets` — employees see their timesheets; administrators see all weekly work reports
@@ -98,9 +107,11 @@ Passwords are stored as bcrypt hashes. Session tokens are random, stored hashed 
 
 Employee records are stored separately from login accounts. Creating an employee record does not create login credentials; an existing employee-role user with the same email is linked automatically. The seed command also creates or completes the seeded account's employee profile.
 
-Leave requests are stored in PostgreSQL. The API counts weekdays (Monday–Friday, inclusive) and does not account for public holidays. HR administrators configure company annual, sick, and casual allowances in **Settings → Leave Policy**; balances renew on January 1 without automatic carry-forward, changing an allowance preserves days already used in the current year, and new employees receive the current allowances. Requests spanning calendar years are charged to each year's balance by weekday. Policy changes are recorded with the administrator and timestamp. Pending requests are displayed separately and reserved when submitting further requests; approved annual, sick, and casual leave is deducted atomically from the balance. Maternity/paternity and unpaid leave do not deduct those balances.
+Leave requests and company holidays are stored in PostgreSQL. Administrators publish company-wide holidays from **Leaves & Calendar**; employees see them on the shared calendar and receive in-app notifications when holidays are added, changed, or removed. Holiday date ranges cannot overlap. Leave day counts include weekdays only and exclude published company holidays. If a holiday changes dates over existing leave requests, pending/approved request day counts and affected leave balances are recalculated. HR administrators configure company annual, sick, and casual allowances in **Settings → Leave Policy**; balances renew on January 1 without automatic carry-forward, changing an allowance preserves days already used in the current year, and new employees receive the current allowances. Requests spanning calendar years are charged to each year's balance by working day. Policy changes are recorded with the administrator and timestamp. Pending requests are displayed separately and reserved when employees submit additional requests; approved annual, sick, and casual leave is deducted atomically from the balance. Maternity/paternity and unpaid leave do not deduct those balances.
 
-Projects, project-team memberships, project tasks, timesheets, and timesheet entries are stored in PostgreSQL. Administrators create and assign project tasks to team members; employees update their assigned task status and progress note, and explain blockers. Project progress is calculated from completed tasks rather than manually entered. Project budgets are displayed in Indian rupees (₹); only administrators can see them. Employees record weekly hours against assigned active projects, with a work description required for each project/day with logged hours. A weekly report also requires a completed-work summary and next-week focus before submission; blockers are optional, and drafts can be incomplete. Administrators can filter, review, approve or return reports, and download the selected reports as a two-sheet Excel workbook with weekly summaries and daily work details. Hours are validated to a maximum of 24 per person per day.
+Attendance records are stored separately from app authentication sessions. Employees explicitly clock in and clock out; an open session is not automatically closed when they sign out of the application, and any missed clock-out remains flagged for review. Administrators can filter attendance by employee and date, and correct times only with a reason; each correction records the administrator, timestamp, reason, and before/after values. Durations are elapsed time between the recorded clock-in and clock-out and do not prove continuous work or subtract breaks. Attendance display and date filtering use `COMPANY_TIME_ZONE` (default `Asia/Kolkata`); set it to a valid IANA timezone in `backend/.env` when the company uses another timezone.
+
+Projects, project-team memberships, project tasks, timesheets, and timesheet entries are stored in PostgreSQL. Administrators can manage project teams after creation; the project lead cannot be removed, and team members with unfinished assigned tasks must have those tasks reassigned or completed before removal. Added and removed members are notified. Administrators create and assign project tasks to team members; employees update their assigned task status and progress note, and explain blockers. Project progress is calculated from completed tasks rather than manually entered. Project budgets are displayed in Indian rupees (₹); only administrators can see them. Employees record weekly hours against assigned active projects, with a work description required for each project/day with logged hours. A weekly report also requires a completed-work summary and next-week focus before submission; blockers are optional, and drafts can be incomplete. Administrators can filter, review, approve or return reports, and download the selected reports as a two-sheet Excel workbook with weekly summaries and daily work details. Hours are validated to a maximum of 24 per person per day.
 
 Payroll runs and employee records are stored in PostgreSQL. Payroll amounts are entered by administrators; the API calculates gross earnings, deductions, and net pay and limits employees to viewing their own records. No tax rules, bank transfers, or payment-provider integrations are implemented; marking a record as paid is only a status update.
 
