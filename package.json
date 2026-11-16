@@ -4,10 +4,10 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "dev:api": "corepack pnpm --filter @aavil/backend dev",
-    "dev:all": "concurrently -k -n web,api -c cyan,green \"vite\" \"corepack pnpm --filter @aavil/backend dev\"",
-    "build": "tsc -b && corepack pnpm --filter @aavil/backend build && vite build",
+    "dev": "node init && vite",
+    "dev:api": "node init && corepack pnpm --filter @aavil/backend dev",
+    "dev:all": "node init && concurrently -k -n web,api -c cyan,green \"vite\" \"corepack pnpm --filter @aavil/backend dev\"",
+    "build": "node init && tsc -b && corepack pnpm --filter @aavil/backend build && vite build",
     "db:generate": "corepack pnpm --filter @aavil/backend db:generate",
     "db:migrate": "corepack pnpm --filter @aavil/backend db:migrate",
     "db:seed": "corepack pnpm --filter @aavil/backend db:seed",
@@ -17,9 +17,11 @@
   "dependencies": {
     "@e965/xlsx": "^0.20.3",
     "country-region-data": "^4.1.0",
+    "dotenv": "^8.2.0",
     "jspdf": "^4.2.1",
     "libphonenumber-js": "^1.13.15",
     "lucide-react": "^1.57.0",
+    "node-fetch": "^3.3.2",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
   },
